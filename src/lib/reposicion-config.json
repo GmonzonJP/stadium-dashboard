@@ -1,0 +1,31 @@
+{
+    "default": {
+        "ventanaRitmoDias": 180,
+        "umbralReposicionDias": 45,
+        "stockObjetivoDias": 90
+    },
+    "porCategoria": {
+        "1": {
+            "nombre": "Calzado",
+            "ventanaRitmoDias": 180,
+            "umbralReposicionDias": 45
+        },
+        "2": {
+            "nombre": "Indumentaria",
+            "ventanaRitmoDias": 120,
+            "umbralReposicionDias": 30
+        },
+        "3": {
+            "nombre": "Accesorios",
+            "ventanaRitmoDias": 90,
+            "umbralReposicionDias": 21
+        }
+    },
+    "porProveedor": {},
+    "descripcionSemaforo": {
+        "red": "SOBRESTOCK: Días reales de stock superan los esperados. Riesgo de obsolescencia.",
+        "green": "REPONER PRONTO: Stock bajo, menos de {umbral} días restantes. Acción de recompra recomendada.",
+        "black": "NORMAL: Stock dentro de parámetros esperados.",
+        "white": "SIN INFO: Faltan datos para calcular (sin última compra o sin ventas para estimar ritmo)."
+    }
+}
