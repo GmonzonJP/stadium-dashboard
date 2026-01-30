@@ -137,10 +137,13 @@ export async function GET(
     try {
         // Get basic product info from transacciones
         // Primero obtenemos el PVP de ArticuloPrecio de forma independiente
+        // Nota: ArticuloPrecio puede tener baseCol más corto (ej: 146.S2112)
+        // mientras Transacciones tiene el código completo (ej: 146.S21120064)
+        // Por eso buscamos coincidencia exacta O que el articulo empiece con el baseCol de ArticuloPrecio
         const pvpQuery = `
             SELECT MAX(Precio) as pvp
             FROM ArticuloPrecio
-            WHERE baseCol = @articulo
+            WHERE @articulo LIKE baseCol + '%' OR baseCol = @articulo
         `;
 
         const pvpResult = await executeQuery(pvpQuery.replace(/@articulo/g, `'${articulo}'`));
