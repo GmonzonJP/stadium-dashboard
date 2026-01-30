@@ -11,6 +11,14 @@ import 'react-datepicker/dist/react-datepicker.css';
 
 registerLocale('es', es);
 
+// Formatear fecha local sin conversión a UTC (evita bugs de zona horaria)
+const formatDateLocal = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
 export function DateRangePicker() {
     const { selectedFilters, setSelectedFilters } = useFilters();
     const [isOpen, setIsOpen] = useState(false);
@@ -71,8 +79,8 @@ export function DateRangePicker() {
         if (preset !== 'Fechas Especificas') {
             setSelectedFilters(prev => ({
                 ...prev,
-                startDate: start.toISOString().split('T')[0],
-                endDate: end.toISOString().split('T')[0]
+                startDate: formatDateLocal(start),
+                endDate: formatDateLocal(end)
             }));
             setIsOpen(false);
             setShowCustomRange(false);
@@ -89,7 +97,7 @@ export function DateRangePicker() {
     };
 
     const handleClear = () => {
-        const today = new Date().toISOString().split('T')[0];
+        const today = formatDateLocal(new Date());
         setSelectedFilters(prev => ({
             ...prev,
             startDate: today,
@@ -109,7 +117,7 @@ export function DateRangePicker() {
             >
                 <Calendar size={14} />
                 <span>
-                    {new Date(selectedFilters.startDate).toLocaleDateString('es-ES')} - {new Date(selectedFilters.endDate).toLocaleDateString('es-ES')}
+                    {new Date(selectedFilters.startDate + 'T00:00:00').toLocaleDateString('es-ES')} - {new Date(selectedFilters.endDate + 'T00:00:00').toLocaleDateString('es-ES')}
                 </span>
                 <ChevronDown size={12} className={cn("transition-transform", isOpen && "rotate-180")} />
             </button>

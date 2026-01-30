@@ -64,16 +64,18 @@ interface ProductAnalysisResponse {
     };
 }
 
-type SortColumn = 
-    | 'articulo' 
-    | 'unidades_vendidas' 
-    | 'stock_total' 
-    | 'ultimo_costo' 
-    | 'pvp' 
-    | 'precio_promedio_asp' 
-    | 'venta_total' 
-    | 'margen' 
-    | 'dias_stock' 
+type SortColumn =
+    | 'articulo'
+    | 'unidades_vendidas'
+    | 'stock_total'
+    | 'ultimo_costo'
+    | 'pvp'
+    | 'precio_promedio_asp'
+    | 'venta_total'
+    | 'margen'
+    | 'markup'
+    | 'ultima_compra'
+    | 'dias_stock'
     | 'pares_por_dia'
     | 'semaforo';
 
@@ -204,6 +206,14 @@ export function ProductAnalysisTable() {
                 aVal = a.margen || 0;
                 bVal = b.margen || 0;
                 break;
+            case 'markup':
+                aVal = a.markup || 0;
+                bVal = b.markup || 0;
+                break;
+            case 'ultima_compra':
+                aVal = a.ultima_compra_fecha ? new Date(a.ultima_compra_fecha).getTime() : 0;
+                bVal = b.ultima_compra_fecha ? new Date(b.ultima_compra_fecha).getTime() : 0;
+                break;
             case 'dias_stock':
                 aVal = a.dias_stock || 999999;
                 bVal = b.dias_stock || 999999;
@@ -309,8 +319,8 @@ export function ProductAnalysisTable() {
                             <SortHeader column="precio_promedio_asp" label="ASP" />
                             <SortHeader column="venta_total" label="Venta $" />
                             <SortHeader column="margen" label="Margen" />
-                            <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wider text-right">Markup</th>
-                            <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wider text-center">Últ. Compra</th>
+                            <SortHeader column="markup" label="Markup" />
+                            <SortHeader column="ultima_compra" label="Últ. Compra" align="center" />
                             <SortHeader column="dias_stock" label="Días Stock" align="center" />
                             <SortHeader column="pares_por_dia" label="Par/Día" align="center" />
                             <SortHeader column="semaforo" label="Semáforo" align="center" />
@@ -594,6 +604,8 @@ export function ProductAnalysisTable() {
             <ProductDetail
                 productId={selectedProductId}
                 onClose={() => setSelectedProductId(null)}
+                initialStartDate={selectedFilters.startDate}
+                initialEndDate={selectedFilters.endDate}
             />
 
             {/* Add to Price Queue Modal */}

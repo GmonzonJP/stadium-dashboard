@@ -22,6 +22,8 @@ export async function POST(request: NextRequest) {
     const pool = await getDbConnection();
 
     // Query principal para obtener productos con métricas
+    // IMPORTANTE: UltimaCompra.BaseArticulo es IdArticulo (con talle),
+    // necesitamos JOIN con Articulos para obtener el Base correcto
     const baseQuery = `
       WITH ProductoVentas AS (
         SELECT
@@ -32,7 +34,8 @@ export async function POST(request: NextRequest) {
           SUM(T.Cantidad) as UnidadesVendidas,
           SUM(T.PRECIO) as VentaTotal,
           MAX(T.Fecha) as UltimaVentaFecha,
-          MIN(T.Fecha) as PrimeraVentaFecha
+          MIN(T.Fecha) as PrimeraVentaFecha,
+          MAX(T.PRECIO / NULLIF(T.Cantidad, 0)) as MaxPrecioUnitario
         FROM Transacciones T
         WHERE T.Cantidad > 0
         {WHERE_CLAUSE}
@@ -40,29 +43,48 @@ export async function POST(request: NextRequest) {
       ),
       ProductoStock AS (
         SELECT
-          LEFT(M.IdArticulo, LEN(M.IdArticulo) - 2) as BaseCol,
+          A.Base as BaseCol,
           SUM(M.TotalStock) as StockTotal
         FROM MovStockTotalResumen M
+        INNER JOIN Articulos A ON A.IdArticulo = M.IdArticulo
         WHERE M.TotalStock > 0
-        GROUP BY LEFT(M.IdArticulo, LEN(M.IdArticulo) - 2)
+        GROUP BY A.Base
       ),
       UltimaCompraInfo AS (
+        -- JOIN con Articulos para obtener Base correcto (no usar BaseArticulo directamente)
         SELECT
-          UC.BaseArticulo as BaseCol,
-          UC.FechaUltimaCompra,
-          UC.CantidadUltimaCompra,
-          UC.UltimoCosto
+          A.Base as BaseCol,
+          MAX(UC.FechaUltimaCompra) as FechaUltimaCompra,
+          SUM(UC.CantidadUltimaCompra) as CantidadUltimaCompra,
+          MAX(UC.UltimoCosto) as UltimoCosto
         FROM UltimaCompra UC
+        INNER JOIN Articulos A ON A.IdArticulo = UC.BaseArticulo
+        WHERE UC.FechaUltimaCompra IS NOT NULL
+        GROUP BY A.Base
       ),
       PrimeraVentaDesdeCompra AS (
+        -- JOIN con Articulos para obtener Base correcto
         SELECT
           T.BaseCol,
           MIN(T.Fecha) as PrimeraVentaDesdeUltimaCompra
         FROM Transacciones T
-        JOIN UltimaCompra UC ON T.BaseCol = UC.BaseArticulo
-        WHERE T.Fecha >= UC.FechaUltimaCompra
+        INNER JOIN (
+          SELECT A.Base as BaseCol, MAX(UC.FechaUltimaCompra) as FechaUltimaCompra
+          FROM UltimaCompra UC
+          INNER JOIN Articulos A ON A.IdArticulo = UC.BaseArticulo
+          GROUP BY A.Base
+        ) UCI ON T.BaseCol = UCI.BaseCol
+        WHERE T.Fecha >= UCI.FechaUltimaCompra
           AND T.Cantidad > 0
         GROUP BY T.BaseCol
+      )
+      ,
+      PrecioVenta AS (
+        SELECT
+          baseCol as BaseCol,
+          MAX(Precio) as PVP
+        FROM ArticuloPrecio
+        GROUP BY baseCol
       )
       SELECT
         PV.BaseCol,
@@ -76,11 +98,13 @@ export async function POST(request: NextRequest) {
         UCI.FechaUltimaCompra,
         UCI.UltimoCosto,
         PVDC.PrimeraVentaDesdeUltimaCompra,
-        DATEDIFF(DAY, PVDC.PrimeraVentaDesdeUltimaCompra, GETDATE()) as DiasDesde1raVentaUltimaCompra
+        DATEDIFF(DAY, PVDC.PrimeraVentaDesdeUltimaCompra, GETDATE()) as DiasDesde1raVentaUltimaCompra,
+        COALESCE(PRV.PVP, PV.MaxPrecioUnitario) as PVP
       FROM ProductoVentas PV
       LEFT JOIN ProductoStock PS ON PV.BaseCol = PS.BaseCol
       LEFT JOIN UltimaCompraInfo UCI ON PV.BaseCol = UCI.BaseCol
       LEFT JOIN PrimeraVentaDesdeCompra PVDC ON PV.BaseCol = PVDC.BaseCol
+      LEFT JOIN PrecioVenta PRV ON PV.BaseCol = PRV.BaseCol
       ORDER BY PV.VentaTotal DESC
     `;
 
@@ -136,6 +160,8 @@ export async function POST(request: NextRequest) {
         estado: p.estado,
         statusInfo: p.statusInfo,
         esSaldo: p.esSaldo,
+        pvp: raw.PVP || null,
+        ultimoCosto: raw.UltimoCosto || null,
       };
     });
 

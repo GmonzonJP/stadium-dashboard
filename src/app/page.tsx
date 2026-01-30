@@ -25,7 +25,7 @@ export default function Dashboard() {
   const [isLoadingAlerts, setIsLoadingAlerts] = useState(true);
 
   // State for pinned detail tables
-  const [pinnedTables, setPinnedTables] = useState<{ id: string, title: string, groupBy: string, groupByLabel: string }[]>([]);
+  const [pinnedTables, setPinnedTables] = useState<{ id: string, title: string, groupBy: string, groupByLabel: string, isNew: boolean }[]>([]);
 
   useEffect(() => {
     async function fetchMetrics() {
@@ -140,9 +140,10 @@ export default function Dashboard() {
     };
 
     const newId = `${metricTitle}-${groupByType}-${Date.now()}`;
+    // Mark all existing tables as not new
     setPinnedTables(prev => [
-      { id: newId, title: metricTitle, groupBy: groupByType, groupByLabel: groupLabels[groupByType] || groupByType },
-      ...prev
+      { id: newId, title: metricTitle, groupBy: groupByType, groupByLabel: groupLabels[groupByType] || groupByType, isNew: true },
+      ...prev.map(t => ({ ...t, isNew: false }))
     ]);
   };
 
@@ -293,6 +294,25 @@ export default function Dashboard() {
             </div>
           </div>
 
+          {/* Pinned Tables Area - Aparece debajo de las tarjetas KPI, antes de Análisis de Productos */}
+          <AnimatePresence>
+            {pinnedTables.length > 0 && (
+              <div className="space-y-6">
+                {pinnedTables.map(table => (
+                  <PinnedMetricTable
+                    key={table.id}
+                    id={table.id}
+                    title={table.title}
+                    groupBy={table.groupBy}
+                    groupByLabel={table.groupByLabel}
+                    onClose={removePinnedTable}
+                    isNew={table.isNew}
+                  />
+                ))}
+              </div>
+            )}
+          </AnimatePresence>
+
           {/* Tabla de Análisis de Productos */}
           <div className="space-y-4">
             <h3 className="text-lg font-bold text-slate-400 uppercase tracking-wider">
@@ -300,23 +320,6 @@ export default function Dashboard() {
               <span className="text-xs text-slate-600 ml-2 font-normal">(período seleccionado)</span>
             </h3>
             <ProductAnalysisTable />
-          </div>
-
-
-          {/* Pinned Tables Area */}
-          <div className="space-y-6">
-            <AnimatePresence>
-              {pinnedTables.map(table => (
-                <PinnedMetricTable
-                  key={table.id}
-                  id={table.id}
-                  title={table.title}
-                  groupBy={table.groupBy}
-                  groupByLabel={table.groupByLabel}
-                  onClose={removePinnedTable}
-                />
-              ))}
-            </AnimatePresence>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -373,6 +376,8 @@ export default function Dashboard() {
           <ProductDetail
             productId={selectedProductId}
             onClose={() => setSelectedProductId(null)}
+            initialStartDate={selectedFilters.startDate}
+            initialEndDate={selectedFilters.endDate}
           />
         </>
       )}

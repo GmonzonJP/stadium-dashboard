@@ -127,6 +127,8 @@ export interface SellOutByProduct {
   estado: ProductoEstado;
   statusInfo: ProductStatusInfo;
   esSaldo: boolean;
+  pvp: number | null;
+  ultimoCosto: number | null;
 }
 
 // ============================================

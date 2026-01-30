@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useFilters } from '@/context/FilterContext';
 import { X, ArrowUpDown, ArrowUp, ArrowDown, Loader2, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -14,6 +14,8 @@ interface PinnedMetricTableProps {
     onClose: (id: string) => void;
     /** Mostrar columnas comparativas con año anterior */
     showComparison?: boolean;
+    /** Si es true, aplica el efecto de highlight y scroll */
+    isNew?: boolean;
 }
 
 interface DataRow {
@@ -75,15 +77,34 @@ function ComparativoCell({ actual, anterior, isMoney = false }: { actual: number
     );
 }
 
-export function PinnedMetricTable({ id, title, groupBy, groupByLabel, onClose, showComparison = true }: PinnedMetricTableProps) {
+export function PinnedMetricTable({ id, title, groupBy, groupByLabel, onClose, showComparison = true, isNew = false }: PinnedMetricTableProps) {
     const { selectedFilters } = useFilters();
     const [data, setData] = useState<DataRow[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [showHighlight, setShowHighlight] = useState(isNew);
+    const tableRef = useRef<HTMLDivElement>(null);
 
     // Sorting state: default to sales descending
     const [sortColumn, setSortColumn] = useState<string>('sales');
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+
+    // Scroll into view and highlight when new
+    useEffect(() => {
+        if (isNew && tableRef.current) {
+            setTimeout(() => {
+                tableRef.current?.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'center'
+                });
+            }, 100);
+            // Remove highlight after animation completes
+            const timer = setTimeout(() => {
+                setShowHighlight(false);
+            }, 2100);
+            return () => clearTimeout(timer);
+        }
+    }, [isNew]);
 
     useEffect(() => {
         async function fetchData() {
@@ -171,10 +192,14 @@ export function PinnedMetricTable({ id, title, groupBy, groupByLabel, onClose, s
 
     return (
         <motion.div
+            ref={tableRef}
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden shadow-xl mb-6 last:mb-0"
+            className={cn(
+                "bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden shadow-xl mb-6 last:mb-0",
+                showHighlight && "apple-highlight"
+            )}
         >
             <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-800/20">
                 <div>

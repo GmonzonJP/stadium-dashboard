@@ -1,0 +1,89 @@
+# Release Pipeline
+# Crear releases con changelog automático
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: 📦 Create Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version from tag
+        id: version
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "📦 Creating release: $VERSION"
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Obtener tag anterior
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
+          if [ -z "$PREV_TAG" ]; then
+            echo "First release - no previous tag found"
+            CHANGES="🎉 Initial release"
+          else
+            echo "Generating changelog from $PREV_TAG to ${{ steps.version.outputs.version }}"
+
+            # Generar changelog agrupado
+            CHANGES=""
+
+            # Features
+            FEATURES=$(git log $PREV_TAG..HEAD --pretty=format:"- %s" --grep="feat" | head -20)
+            if [ -n "$FEATURES" ]; then
+              CHANGES="${CHANGES}### ✨ Features\n${FEATURES}\n\n"
+            fi
+
+            # Fixes
+            FIXES=$(git log $PREV_TAG..HEAD --pretty=format:"- %s" --grep="fix" | head -20)
+            if [ -n "$FIXES" ]; then
+              CHANGES="${CHANGES}### 🐛 Bug Fixes\n${FIXES}\n\n"
+            fi
+
+            # Others
+            OTHERS=$(git log $PREV_TAG..HEAD --pretty=format:"- %s" --invert-grep --grep="feat" --grep="fix" | head -10)
+            if [ -n "$OTHERS" ]; then
+              CHANGES="${CHANGES}### 📝 Other Changes\n${OTHERS}\n\n"
+            fi
+
+            # Estadísticas
+            FILES_CHANGED=$(git diff --shortstat $PREV_TAG..HEAD)
+            CHANGES="${CHANGES}### 📊 Stats\n${FILES_CHANGED}"
+          fi
+
+          # Escribir a archivo para evitar problemas con multiline
+          echo -e "$CHANGES" > /tmp/changelog.md
+          cat /tmp/changelog.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: Stadium Dashboard ${{ steps.version.outputs.version }}
+          body_path: /tmp/changelog.md
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.version, 'alpha') || contains(steps.version.outputs.version, 'beta') || contains(steps.version.outputs.version, 'rc') }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Notify release created
+        run: |
+          echo "✅ Release ${{ steps.version.outputs.version }} created successfully!"
+          echo "🔗 https://github.com/${{ github.repository }}/releases/tag/${{ steps.version.outputs.version }}"

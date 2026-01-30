@@ -12,36 +12,99 @@ import { RelatedColors } from './ProductDetail/RelatedColors';
 import { ProductMetricsGrid } from './ProductDetail/ProductMetricsGrid';
 import { clasificarProductoCompleto } from '@/lib/producto-classifier';
 import { DEPOSITOS_CONFIG, UMBRALES } from '@/types/sell-out';
-import DatePicker, { registerLocale } from 'react-datepicker';
-import { es } from 'date-fns/locale';
-import 'react-datepicker/dist/react-datepicker.css';
 
-registerLocale('es', es);
+// Helper para formatear fecha local sin conversión UTC
+const formatDateLocal = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
 
 interface ProductDetailProps {
     productId: string | null;
     onClose: () => void;
+    initialStartDate?: string;
+    initialEndDate?: string;
 }
 
-export function ProductDetail({ productId, onClose }: ProductDetailProps) {
+export function ProductDetail({ productId, onClose, initialStartDate, initialEndDate }: ProductDetailProps) {
     const [data, setData] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [selectedColor, setSelectedColor] = useState<string | null>(null);
 
-    // Date range for filtering
-    const [startDate, setStartDate] = useState<Date | null>(null);
-    const [endDate, setEndDate] = useState<Date | null>(null);
-    const [showDatePicker, setShowDatePicker] = useState(false);
+    // Date range for filtering - inicializa con el período del dashboard
+    const [startDate, setStartDate] = useState<string>(initialStartDate || '');
+    const [endDate, setEndDate] = useState<string>(initialEndDate || '');
+    const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
 
     // Current displayed product
     const currentProductId = selectedColor || productId;
+
+    // Aplicar preset de fecha
+    const applyDatePreset = (preset: string) => {
+        const today = new Date();
+        const year = today.getFullYear();
+        let start = new Date();
+        let end = new Date();
+
+        switch (preset) {
+            case 'clear':
+                setStartDate('');
+                setEndDate('');
+                setIsDatePickerOpen(false);
+                return;
+            case 'Hoy':
+                break;
+            case 'Ayer':
+                start.setDate(today.getDate() - 1);
+                end.setDate(today.getDate() - 1);
+                break;
+            case 'Ultimos 7 Dias':
+                start.setDate(today.getDate() - 6);
+                break;
+            case 'Ultimos 90 Dias':
+                start.setDate(today.getDate() - 89);
+                break;
+            case 'Este Mes':
+                start = new Date(year, today.getMonth(), 1);
+                end = new Date(year, today.getMonth() + 1, 0);
+                break;
+            case 'Mes Pasado':
+                start = new Date(year, today.getMonth() - 1, 1);
+                end = new Date(year, today.getMonth(), 0);
+                break;
+            case 'Q1':
+                start = new Date(year, 0, 1);
+                end = new Date(year, 2, 31);
+                break;
+            case 'Q2':
+                start = new Date(year, 3, 1);
+                end = new Date(year, 5, 30);
+                break;
+            case 'Q3':
+                start = new Date(year, 6, 1);
+                end = new Date(year, 8, 30);
+                break;
+            case 'Q4':
+                start = new Date(year, 9, 1);
+                end = new Date(year, 11, 31);
+                break;
+            default:
+                return;
+        }
+
+        setStartDate(formatDateLocal(start));
+        setEndDate(formatDateLocal(end));
+        setIsDatePickerOpen(false);
+    };
 
     useEffect(() => {
         if (currentProductId) {
             setIsLoading(true);
             const params = new URLSearchParams({ t: Date.now().toString() });
-            if (startDate) params.append('startDate', startDate.toISOString().split('T')[0]);
-            if (endDate) params.append('endDate', endDate.toISOString().split('T')[0]);
+            if (startDate) params.append('startDate', startDate);
+            if (endDate) params.append('endDate', endDate);
 
             fetch(`/api/product/${currentProductId}?${params}`, {
                 cache: 'no-store',
@@ -59,14 +122,16 @@ export function ProductDetail({ productId, onClose }: ProductDetailProps) {
         }
     }, [currentProductId, startDate, endDate]);
 
-    // Reset selected color when modal closes
+    // Reset selected color when modal closes, and sync dates when modal opens
     useEffect(() => {
         if (!productId) {
             setSelectedColor(null);
-            setStartDate(null);
-            setEndDate(null);
+        } else {
+            // Cuando se abre el modal, usar las fechas del dashboard
+            if (initialStartDate) setStartDate(initialStartDate);
+            if (initialEndDate) setEndDate(initialEndDate);
         }
-    }, [productId]);
+    }, [productId, initialStartDate, initialEndDate]);
 
     // Clasificar el producto
     const clasificacion = useMemo(() => {
@@ -102,9 +167,8 @@ export function ProductDetail({ productId, onClose }: ProductDetailProps) {
                 const matrixRow = data.matrixData.find((r: any) => r.talla === t.talla);
                 const cell = matrixRow?.[`store_${storeId}`];
                 const stock = cell?.stock || 0;
-                // Get sales from sucursales data
-                const sucursal = data.sucursales?.find((s: any) => s.id === storeId);
-                const ventas = data.ventasPorTallaTienda?.[storeId]?.[t.talla] || 0;
+                // Get sales from matrixData cell (already includes ventas)
+                const ventas = cell?.ventas || 0;
 
                 tallasData[t.talla] = { stock, ventas };
                 totalStock += stock;
@@ -175,30 +239,89 @@ export function ProductDetail({ productId, onClose }: ProductDetailProps) {
                         initial={{ opacity: 0, scale: 0.95, y: 20 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                        className="fixed inset-4 bg-white rounded-3xl z-[610] shadow-2xl flex flex-col overflow-hidden"
+                        className="fixed inset-4 bg-white dark:bg-slate-900 rounded-3xl z-[610] shadow-2xl flex flex-col overflow-hidden"
                     >
                         {/* Header - CYBE Style */}
-                        <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-gradient-to-r from-slate-50 to-white">
+                        <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-gradient-to-r from-slate-50 to-white dark:from-slate-800 dark:to-slate-900">
                             <div className="flex items-center space-x-4">
                                 <button
                                     onClick={selectedColor ? () => setSelectedColor(null) : onClose}
-                                    className="p-2 hover:bg-slate-200 rounded-xl text-slate-600 hover:text-slate-900 transition-all"
+                                    className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all"
                                 >
                                     <ArrowLeft size={24} />
                                 </button>
                                 <div>
                                     <div className="flex items-center gap-3">
-                                        <span className="text-sm text-slate-500 font-mono">{data?.BaseCol || currentProductId}</span>
-                                        <span className="text-lg font-bold text-blue-600">{data?.DescripcionMarca || 'N/A'}</span>
+                                        <span className="text-sm text-slate-500 dark:text-slate-400 font-mono">{data?.BaseCol || currentProductId}</span>
+                                        <span className="text-lg font-bold text-blue-600 dark:text-blue-400">{data?.DescripcionMarca || 'N/A'}</span>
                                     </div>
                                 </div>
                             </div>
-                            <button
-                                onClick={onClose}
-                                className="p-2 hover:bg-slate-200 rounded-xl text-slate-600 hover:text-slate-900 transition-all"
-                            >
-                                <X size={24} />
-                            </button>
+
+                            {/* Date Range Picker - Estilo Dashboard */}
+                            <div className="flex items-center gap-3">
+                                <div className="relative">
+                                    <button
+                                        onClick={() => setIsDatePickerOpen(!isDatePickerOpen)}
+                                        className={cn(
+                                            "flex items-center space-x-2 bg-slate-900/50 border border-slate-800 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
+                                            isDatePickerOpen
+                                                ? "text-white border-blue-500/50"
+                                                : "text-slate-400 hover:text-white"
+                                        )}
+                                    >
+                                        <Calendar size={14} />
+                                        <span>
+                                            {startDate && endDate
+                                                ? `${new Date(startDate + 'T00:00:00').toLocaleDateString('es-ES')} - ${new Date(endDate + 'T00:00:00').toLocaleDateString('es-ES')}`
+                                                : 'Todo el historial'}
+                                        </span>
+                                        <ChevronDown size={12} className={cn("transition-transform", isDatePickerOpen && "rotate-180")} />
+                                    </button>
+
+                                    <AnimatePresence>
+                                        {isDatePickerOpen && (
+                                            <>
+                                                <div className="fixed inset-0 z-[620]" onClick={() => setIsDatePickerOpen(false)} />
+                                                <motion.div
+                                                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                    className="absolute right-0 top-full mt-2 w-56 bg-[#020617] border border-slate-800 rounded-xl shadow-2xl z-[630] py-1"
+                                                >
+                                                    {['Hoy', 'Ayer', 'Ultimos 7 Dias', 'Ultimos 90 Dias', 'Este Mes', 'Mes Pasado', 'Q1', 'Q2', 'Q3', 'Q4'].map((preset) => (
+                                                        <button
+                                                            key={preset}
+                                                            onClick={() => applyDatePreset(preset)}
+                                                            className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                                                        >
+                                                            {preset}
+                                                        </button>
+                                                    ))}
+                                                    {(startDate || endDate) && (
+                                                        <>
+                                                            <div className="h-px bg-slate-800 my-1" />
+                                                            <button
+                                                                onClick={() => applyDatePreset('clear')}
+                                                                className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-red-900/20 hover:text-red-300 transition-colors"
+                                                            >
+                                                                Limpiar filtro
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                </motion.div>
+                                            </>
+                                        )}
+                                    </AnimatePresence>
+                                </div>
+
+                                <button
+                                    onClick={onClose}
+                                    className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all"
+                                >
+                                    <X size={24} />
+                                </button>
+                            </div>
                         </div>
 
                         <div className="flex-1 overflow-y-auto custom-scrollbar">
@@ -208,15 +331,15 @@ export function ProductDetail({ productId, onClose }: ProductDetailProps) {
                                 </div>
                             ) : (
                                 <div className="p-6">
-                                    {/* Main Grid: Image + Info */}
+                                    {/* Main Grid: Image + Info + Top Ventas */}
                                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6">
                                         {/* Left Column: Image + Color Variants */}
-                                        <div className="lg:col-span-4 space-y-4">
-                                            <div className="bg-slate-50 rounded-2xl p-6 flex items-center justify-center min-h-[300px]">
+                                        <div className="lg:col-span-3 space-y-4">
+                                            <div className="bg-slate-50 dark:bg-slate-800 rounded-2xl p-4 flex items-center justify-center min-h-[280px]">
                                                 <img
                                                     src={getProductImageUrl(data?.BaseCol || currentProductId)}
                                                     alt={data?.descripcionCorta || currentProductId}
-                                                    className="max-w-full max-h-[350px] object-contain"
+                                                    className="max-w-full max-h-[260px] object-contain"
                                                     onError={(e) => {
                                                         e.currentTarget.src = 'https://placehold.co/400x400/e5e7eb/9ca3af?text=Sin+Imagen';
                                                     }}
@@ -232,18 +355,18 @@ export function ProductDetail({ productId, onClose }: ProductDetailProps) {
                                             )}
                                         </div>
 
-                                        {/* Right Column: Product Info + Metrics */}
-                                        <div className="lg:col-span-8 space-y-4">
+                                        {/* Center Column: Product Info + Metrics */}
+                                        <div className="lg:col-span-6 space-y-4">
                                             {/* Product Title + Status */}
                                             <div className="flex items-start justify-between">
                                                 <div>
-                                                    <div className="flex items-center gap-2 text-sm text-slate-500 mb-1">
+                                                    <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 mb-1">
                                                         <span>{data?.DescripcionColor || 'Color N/A'}</span>
                                                     </div>
-                                                    <h2 className="text-xl font-bold text-slate-900">
+                                                    <h2 className="text-xl font-bold text-slate-900 dark:text-white">
                                                         {data?.descripcionCorta || currentProductId}
                                                     </h2>
-                                                    <p className="text-sm text-slate-500 mt-1">
+                                                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
                                                         {data?.DescripcionClase || 'N/A'} | {data?.DescripcionGenero || 'N/A'}
                                                     </p>
                                                 </div>
@@ -256,67 +379,74 @@ export function ProductDetail({ productId, onClose }: ProductDetailProps) {
                                             </div>
 
                                             {/* Metrics Grid - CYBE Style */}
+                                            {/* Usar siempre datos desde última compra, NO del período seleccionado */}
                                             <ProductMetricsGrid
-                                                ritmoVenta={clasificacion?.paresPorDia || null}
+                                                ritmoVenta={data?.ritmoDiario || clasificacion?.paresPorDia || null}
                                                 diasStock={data?.diasStock || null}
                                                 stock={data?.stock || 0}
                                                 margenBruto={data?.margen || null}
                                                 costo={(data?.ultimoCosto || 0) * 1.22}
                                                 pvp={data?.precioVenta || 0}
                                                 unidadesVendidas={data?.unidadesVendidasDesdeUltCompra || 0}
+                                                unidadesCompradas={data?.unidadesCompradas || 0}
                                                 ultimoCosto={data?.ultimoCosto || 0}
                                                 fechaUltimaCompra={data?.fechaUltCompraFormatted}
                                                 fecha1raVenta={data?.primeraVentaFormatted}
                                                 fechaUltimaVenta={data?.ultimaVentaFormatted}
+                                                ventasImporte={data?.importeVentaDesdeUltCompra || 0}
+                                                utilidadVenta={
+                                                    data?.importeVentaDesdeUltCompra && data?.ultimoCosto
+                                                        ? data.importeVentaDesdeUltCompra - (data.unidadesVendidasDesdeUltCompra * data.ultimoCosto * 1.22)
+                                                        : undefined
+                                                }
                                             />
                                         </div>
-                                    </div>
 
-                                    {/* Date Range Picker */}
-                                    <div className="flex items-center gap-4 mb-6 p-4 bg-slate-50 rounded-xl border border-slate-200">
-                                        <Calendar className="text-slate-500" size={20} />
-                                        <span className="text-sm font-medium text-slate-700">Período:</span>
-                                        <div className="flex items-center gap-2">
-                                            <DatePicker
-                                                selected={startDate}
-                                                onChange={(date: Date | null) => setStartDate(date)}
-                                                selectsStart
-                                                startDate={startDate}
-                                                endDate={endDate}
-                                                locale="es"
-                                                dateFormat="dd/MM/yyyy"
-                                                placeholderText="Desde"
-                                                className="w-28 bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-sm"
-                                            />
-                                            <span className="text-slate-400">-</span>
-                                            <DatePicker
-                                                selected={endDate}
-                                                onChange={(date: Date | null) => setEndDate(date)}
-                                                selectsEnd
-                                                startDate={startDate}
-                                                endDate={endDate}
-                                                minDate={startDate ?? undefined}
-                                                locale="es"
-                                                dateFormat="dd/MM/yyyy"
-                                                placeholderText="Hasta"
-                                                className="w-28 bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-sm"
-                                            />
-                                        </div>
-                                        {(startDate || endDate) && (
-                                            <button
-                                                onClick={() => { setStartDate(null); setEndDate(null); }}
-                                                className="text-xs text-blue-600 hover:text-blue-800"
-                                            >
-                                                Limpiar
-                                            </button>
+                                        {/* Right Column: Top Ventas por Tienda */}
+                                        {topTiendas.length > 0 && (
+                                            <div className="lg:col-span-3">
+                                                <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden h-full flex flex-col">
+                                                    <div className="px-3 py-2 bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
+                                                        <h3 className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                                                            <Store className="text-blue-600 dark:text-blue-400" size={14} />
+                                                            Top Ventas por Tienda
+                                                        </h3>
+                                                    </div>
+                                                    <div className="flex-1 overflow-y-auto max-h-[320px] custom-scrollbar">
+                                                        <table className="w-full text-xs">
+                                                            <thead className="bg-slate-50 dark:bg-slate-700/30 sticky top-0">
+                                                                <tr>
+                                                                    <th className="py-1.5 px-2 text-left font-semibold text-slate-600 dark:text-slate-400">Tienda</th>
+                                                                    <th className="py-1.5 px-2 text-center font-semibold text-slate-600 dark:text-slate-400">Un.</th>
+                                                                    <th className="py-1.5 px-2 text-right font-semibold text-slate-600 dark:text-slate-400">$</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {topTiendas.map((s: any, idx: number) => (
+                                                                    <tr key={s.id} className="border-t border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                                                                        <td className="py-1.5 px-2 font-medium text-slate-800 dark:text-slate-200 truncate max-w-[100px]" title={s.descripcion}>
+                                                                            <span className="text-slate-400 dark:text-slate-500 mr-1">{idx + 1}.</span>
+                                                                            {s.descripcion?.replace('Stadium ', 'S')}
+                                                                        </td>
+                                                                        <td className="py-1.5 px-2 text-center font-semibold text-slate-700 dark:text-slate-300">{s.ttlunidadesVenta || 0}</td>
+                                                                        <td className="py-1.5 px-2 text-right font-mono text-emerald-600 dark:text-emerald-400 text-[10px]">
+                                                                            ${Number(s.ttlimporteVenta || 0).toLocaleString('es-AR', { maximumFractionDigits: 0, notation: 'compact' })}
+                                                                        </td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         )}
                                     </div>
 
                                     {/* Unified Talla Table - Stock + Ventas */}
                                     {unifiedTableData && (
                                         <div className="mb-6">
-                                            <h3 className="text-lg font-bold text-slate-900 mb-3 flex items-center gap-2">
-                                                <Package className="text-blue-600" size={20} />
+                                            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+                                                <Package className="text-blue-600 dark:text-blue-400" size={20} />
                                                 Stock y Ventas por Talla
                                             </h3>
                                             <UnifiedTallaTable
@@ -327,57 +457,14 @@ export function ProductDetail({ productId, onClose }: ProductDetailProps) {
                                         </div>
                                     )}
 
-                                    {/* Top 7 Ventas por Tienda */}
-                                    {topTiendas.length > 0 && (
-                                        <div className="mb-6">
-                                            <h3 className="text-lg font-bold text-slate-900 mb-3 flex items-center gap-2">
-                                                <Store className="text-blue-600" size={20} />
-                                                Top Ventas por Tienda
-                                            </h3>
-                                            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-                                                <table className="w-full text-sm">
-                                                    <thead className="bg-slate-100">
-                                                        <tr>
-                                                            <th className="py-2 px-4 text-left font-semibold text-slate-700">#</th>
-                                                            <th className="py-2 px-4 text-left font-semibold text-slate-700">Tienda</th>
-                                                            <th className="py-2 px-4 text-center font-semibold text-slate-700">Stock</th>
-                                                            <th className="py-2 px-4 text-center font-semibold text-slate-700">Unidades</th>
-                                                            <th className="py-2 px-4 text-right font-semibold text-slate-700">Venta $</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {topTiendas.map((s: any, idx: number) => (
-                                                            <tr key={s.id} className="border-t border-slate-100 hover:bg-slate-50">
-                                                                <td className="py-2 px-4 text-slate-500 font-mono">{idx + 1}</td>
-                                                                <td className="py-2 px-4 font-medium text-slate-900">{s.descripcion}</td>
-                                                                <td className="py-2 px-4 text-center">
-                                                                    <span className={cn(
-                                                                        "px-2 py-0.5 rounded-full text-xs font-bold",
-                                                                        s.ttlstock > 0 ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
-                                                                    )}>
-                                                                        {s.ttlstock || 0}
-                                                                    </span>
-                                                                </td>
-                                                                <td className="py-2 px-4 text-center font-semibold">{s.ttlunidadesVenta || 0}</td>
-                                                                <td className="py-2 px-4 text-right font-mono text-emerald-600">
-                                                                    ${Number(s.ttlimporteVenta || 0).toLocaleString('es-AR', { minimumFractionDigits: 0 })}
-                                                                </td>
-                                                            </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        </div>
-                                    )}
-
                                     {/* Gaussian Chart */}
                                     {data?.tallasData && data.tallasData.length > 0 && (
                                         <div className="mb-6">
-                                            <h3 className="text-lg font-bold text-slate-900 mb-3 flex items-center gap-2">
-                                                <Package className="text-blue-600" size={20} />
+                                            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+                                                <Package className="text-blue-600 dark:text-blue-400" size={20} />
                                                 Distribución por Talla
                                             </h3>
-                                            <div className="bg-white border border-slate-200 rounded-xl p-4">
+                                            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
                                                 <TallaGaussianOverlayChart tallasData={data.tallasData} height={300} />
                                             </div>
                                         </div>

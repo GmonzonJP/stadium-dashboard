@@ -124,29 +124,46 @@ export async function GET(
 ) {
     const { id: articulo } = params;
 
+    // Get date filters from query params
+    const { searchParams } = new URL(req.url);
+    const startDate = searchParams.get('startDate');
+    const endDate = searchParams.get('endDate');
+
+    // Build date filter clause for queries
+    const dateFilter = startDate && endDate
+        ? `AND T.Fecha >= '${startDate}' AND T.Fecha <= '${endDate}'`
+        : '';
+
     try {
         // Get basic product info from transacciones
         const baseInfoQuery = `
-            SELECT 
+            SELECT
                 T.BaseCol,
-                T.IdMarca, 
-                T.DescripcionMarca, 
+                T.IdMarca,
+                T.DescripcionMarca,
                 MAX(T.idClase) as idClase,
-                MAX(T.DescripcionClase) as DescripcionClase, 
-                T.IdGenero, 
-                T.DescripcionGenero, 
+                MAX(T.DescripcionClase) as DescripcionClase,
+                T.IdGenero,
+                T.DescripcionGenero,
                 AR.descripcionCorta,
                 SUM(T.Cantidad) as unidades,
                 CAST(SUM(T.PRECIO) as decimal(18,2)) as Venta,
-                COALESCE(MAX(aPR.Precio), MAX(T.PRECIO / NULLIF(T.Cantidad, 0))) as precioUnitarioLista,
+                COALESCE(MAX(AP.Precio), MAX(T.PRECIO / NULLIF(T.Cantidad, 0))) as precioUnitarioLista,
                 MIN(T.Fecha) as primeraVenta
             FROM Transacciones T
             INNER JOIN (
-                SELECT AR.base as BaseCol, AR.descripcionCorta 
-                FROM Articulos AR 
+                SELECT AR.base as BaseCol, AR.descripcionCorta
+                FROM Articulos AR
                 GROUP BY AR.base, AR.descripcionCorta
             ) AR ON AR.BaseCol = T.BaseCol
-            LEFT JOIN ArticuloPrecio aPR ON aPR.baseCol = T.BaseCol
+            LEFT JOIN (
+                -- ArticuloPrecio pre-agregado por baseCol
+                SELECT
+                    baseCol as BaseCol,
+                    MAX(Precio) as Precio
+                FROM ArticuloPrecio
+                GROUP BY baseCol
+            ) AP ON AP.BaseCol = T.BaseCol
             WHERE T.BaseCol = @articulo
             GROUP BY T.IdGenero, T.DescripcionGenero, T.BaseCol, AR.descripcionCorta, T.IdMarca, T.DescripcionMarca
             HAVING SUM(T.Cantidad) > 0
@@ -234,8 +251,9 @@ export async function GET(
         }
 
         // Get sales by store from transacciones (grouped by BaseCol and IdDeposito)
+        // Apply date filter if provided
         const salesByStoreQuery = `
-            SELECT 
+            SELECT
                 T.IdDeposito as id,
                 MAX(TI.Descripcion) as descripcion,
                 SUM(T.Cantidad) as ttlunidadesVenta,
@@ -243,6 +261,7 @@ export async function GET(
             FROM Transacciones T
             INNER JOIN Tiendas TI ON TI.IdTienda = T.IdDeposito
             WHERE T.BaseCol = @articulo
+            ${dateFilter}
             GROUP BY T.IdDeposito
         `;
 
@@ -365,6 +384,40 @@ export async function GET(
             console.error('Error checking transactions:', err);
         }
 
+        // Get sales for the selected period (if date filters are provided)
+        let ventasPeriodo = {
+            unidades: 0,
+            importe: 0,
+            fechaInicio: startDate,
+            fechaFin: endDate
+        };
+
+        if (startDate && endDate) {
+            const ventasPeriodoQuery = `
+                SELECT
+                    COALESCE(SUM(T.Cantidad), 0) as unidades,
+                    COALESCE(CAST(SUM(T.PRECIO) as decimal(18,2)), 0) as importe,
+                    MIN(T.Fecha) as primeraVenta,
+                    MAX(T.Fecha) as ultimaVenta
+                FROM Transacciones T
+                WHERE T.BaseCol = @articulo
+                AND T.Fecha >= '${startDate}'
+                AND T.Fecha <= '${endDate}'
+            `;
+            try {
+                const ventasPeriodoResult = await executeQuery(ventasPeriodoQuery.replace(/@articulo/g, `'${articulo}'`));
+                ventasPeriodo.unidades = Number(ventasPeriodoResult.recordset[0]?.unidades) || 0;
+                ventasPeriodo.importe = Number(ventasPeriodoResult.recordset[0]?.importe) || 0;
+                console.log(`Period sales for ${articulo} (${startDate} - ${endDate}):`, ventasPeriodo);
+            } catch (err) {
+                console.error('Error getting period sales:', err);
+            }
+        } else {
+            // If no date filter, use all-time sales
+            ventasPeriodo.unidades = unidadesVendidasDesdeUltCompra;
+            ventasPeriodo.importe = importeVentaDesdeUltCompra;
+        }
+
         // Calculate cost of last purchase: cantidadTotal * costoPromedio
         const costoUltimaCompra = ultimaCompra && ultimaCompra.cantidadTotal && ultimaCompra.costoPromedio
             ? Number(ultimaCompra.cantidadTotal) * Number(ultimaCompra.costoPromedio)
@@ -477,13 +530,15 @@ export async function GET(
         }
 
         // Get sales by size (talla) from transacciones
+        // Apply date filter if provided
         const salesByTallaQuery = `
-            SELECT 
+            SELECT
                 T.idArticulo,
                 SUM(T.Cantidad) as unidades,
                 CAST(SUM(T.PRECIO) as decimal(18,2)) as importe
             FROM Transacciones T
             WHERE T.BaseCol = @articulo
+            ${dateFilter}
             GROUP BY T.idArticulo
         `;
 
@@ -584,15 +639,18 @@ export async function GET(
         }
 
         // Get sales by store and size (talla) for matrix
+        // Apply date filter if provided
         const salesByStoreAndTallaQuery = `
-            SELECT 
+            SELECT
                 T.idArticulo,
                 T.IdDeposito as idDeposito,
                 MAX(TI.Descripcion) as descripcion,
-                SUM(T.Cantidad) as ventas
+                SUM(T.Cantidad) as ventas,
+                CAST(SUM(T.PRECIO) as decimal(18,2)) as importe
             FROM Transacciones T
             INNER JOIN Tiendas TI ON TI.IdTienda = T.IdDeposito
             WHERE T.BaseCol = @articulo
+            ${dateFilter}
             GROUP BY T.idArticulo, T.IdDeposito
         `;
 
@@ -737,16 +795,39 @@ export async function GET(
             : null;
         
         // Días de Stock = Stock Actual / Ritmo de Venta Diario
-        // Ritmo de venta diario basado en días desde última compra
+        // Ritmo de venta diario basado en días desde última compra o período seleccionado
         let diasStock = null;
         let ritmoDiario = null;
-        if (ultimaCompra?.fecha && stockActual > 0) {
+
+        // Si hay filtro de período, calcular ritmo basado en el período
+        if (startDate && endDate && ventasPeriodo.unidades > 0) {
+            const fechaInicio = new Date(startDate);
+            const fechaFin = new Date(endDate);
+            const diasPeriodo = Math.max(1, Math.ceil((fechaFin.getTime() - fechaInicio.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+            ritmoDiario = ventasPeriodo.unidades / diasPeriodo;
+            diasStock = ritmoDiario > 0 && stockActual > 0 ? Math.round(stockActual / ritmoDiario) : null;
+        } else if (ultimaCompra?.fecha && stockActual > 0) {
+            // Sin filtro de período, usar última compra
             const fechaUltCompra = new Date(ultimaCompra.fecha);
             const hoy = new Date();
             const diasTranscurridos = Math.max(1, Math.ceil((hoy.getTime() - fechaUltCompra.getTime()) / (1000 * 60 * 60 * 24)));
             ritmoDiario = unidadesVendidasDesdeUltCompra / diasTranscurridos;
             diasStock = ritmoDiario > 0 ? Math.round(stockActual / ritmoDiario) : null;
         }
+
+        // Calcular utilidad de venta para el período
+        // Utilidad = Importe Venta - (Unidades Vendidas * Costo Unitario)
+        const costoVentaPeriodo = ventasPeriodo.unidades * ultimoCostoValue;
+        const utilidadPeriodo = ventasPeriodo.importe - costoVentaPeriodo;
+
+        // ASP y margen para el período
+        const aspPeriodo = ventasPeriodo.unidades > 0
+            ? ventasPeriodo.importe / ventasPeriodo.unidades
+            : null;
+
+        const margenPeriodo = aspPeriodo && ultimoCostoValue > 0
+            ? ((aspPeriodo - ultimoCostoValue) / aspPeriodo) * 100
+            : null;
 
         const response = NextResponse.json({
             ...product,
@@ -764,6 +845,7 @@ export async function GET(
             stockInicial: stockInicial,
             stock: stockActual,
             unidadesVendidasDesdeUltCompra: unidadesVendidasDesdeUltCompra,
+            unidadesCompradas: totalComprado, // Total comprado histórico
             importeVentaDesdeUltCompra: importeVentaDesdeUltCompra,
             costoUltimaCompra: costoUltimaCompra,
             unidades: product.unidades || 0, // Total units sold (all time)
@@ -776,7 +858,19 @@ export async function GET(
             margen: margen, // Margen %
             markup: markup, // Markup %
             diasStock: diasStock, // Días de Stock estimados
-            ritmoDiario: ritmoDiario // Pares por día
+            ritmoDiario: ritmoDiario, // Pares por día
+            // Datos del período seleccionado
+            ventasPeriodo: {
+                unidades: ventasPeriodo.unidades,
+                importe: ventasPeriodo.importe,
+                asp: aspPeriodo,
+                margen: margenPeriodo,
+                utilidad: utilidadPeriodo,
+                costoVenta: costoVentaPeriodo,
+                fechaInicio: startDate,
+                fechaFin: endDate,
+                tieneFiltroPeriodo: !!(startDate && endDate)
+            }
         });
 
         // Add no-cache headers

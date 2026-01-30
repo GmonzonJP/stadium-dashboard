@@ -27,14 +27,16 @@ export async function POST(request: NextRequest) {
     // =============================================
     // 1. DETECTAR ERRORES DE REABASTECIMIENTO
     // =============================================
+    // IMPORTANTE: Usamos Articulos.Base en lugar de SUBSTRING para obtener BaseCol correcto
     const reabastecimientoQuery = `
       WITH StockPorDeposito AS (
         SELECT
-          LEFT(M.IdArticulo, LEN(M.IdArticulo) - 2) as BaseCol,
+          A.Base as BaseCol,
           M.idDeposito,
           SUM(M.TotalStock) as StockTotal
         FROM MovStockTotalResumen M
-        GROUP BY LEFT(M.IdArticulo, LEN(M.IdArticulo) - 2), M.idDeposito
+        INNER JOIN Articulos A ON A.IdArticulo = M.IdArticulo
+        GROUP BY A.Base, M.idDeposito
       ),
       ProductoInfo AS (
         SELECT DISTINCT
@@ -89,6 +91,8 @@ export async function POST(request: NextRequest) {
     // =============================================
     // 2. DETECTAR CLAVOS (>365 días para vender)
     // =============================================
+    // IMPORTANTE: UltimaCompra.BaseArticulo es IdArticulo (con talle),
+    // necesitamos JOIN con Articulos para obtener el Base correcto
     const clavosQuery = `
       WITH ProductoVentas AS (
         SELECT
@@ -104,27 +108,38 @@ export async function POST(request: NextRequest) {
       ),
       ProductoStock AS (
         SELECT
-          LEFT(M.IdArticulo, LEN(M.IdArticulo) - 2) as BaseCol,
+          A.Base as BaseCol,
           SUM(M.TotalStock) as StockTotal
         FROM MovStockTotalResumen M
+        INNER JOIN Articulos A ON A.IdArticulo = M.IdArticulo
         WHERE M.TotalStock > 0
           AND M.idDeposito NOT IN (${DEPOSITOS_CONFIG.outlet.join(',')})
-        GROUP BY LEFT(M.IdArticulo, LEN(M.IdArticulo) - 2)
+        GROUP BY A.Base
       ),
       UltimaCompraInfo AS (
+        -- JOIN con Articulos para obtener Base correcto
         SELECT
-          UC.BaseArticulo as BaseCol,
-          UC.FechaUltimaCompra,
-          UC.UltimoCosto
+          A.Base as BaseCol,
+          MAX(UC.FechaUltimaCompra) as FechaUltimaCompra,
+          MAX(UC.UltimoCosto) as UltimoCosto
         FROM UltimaCompra UC
+        INNER JOIN Articulos A ON A.IdArticulo = UC.BaseArticulo
+        WHERE UC.FechaUltimaCompra IS NOT NULL
+        GROUP BY A.Base
       ),
       PrimeraVentaDesdeCompra AS (
+        -- JOIN con Articulos para obtener Base correcto
         SELECT
           T.BaseCol,
           MIN(T.Fecha) as PrimeraVentaDesdeUltimaCompra
         FROM Transacciones T
-        JOIN UltimaCompra UC ON T.BaseCol = UC.BaseArticulo
-        WHERE T.Fecha >= UC.FechaUltimaCompra
+        INNER JOIN (
+          SELECT A.Base as BaseCol, MAX(UC.FechaUltimaCompra) as FechaUltimaCompra
+          FROM UltimaCompra UC
+          INNER JOIN Articulos A ON A.IdArticulo = UC.BaseArticulo
+          GROUP BY A.Base
+        ) UCI ON T.BaseCol = UCI.BaseCol
+        WHERE T.Fecha >= UCI.FechaUltimaCompra
           AND T.Cantidad > 0
         GROUP BY T.BaseCol
       )
