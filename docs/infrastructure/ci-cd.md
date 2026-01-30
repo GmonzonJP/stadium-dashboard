@@ -63,17 +63,20 @@ Genera release en GitHub con changelog automático.
 
 ### Secrets Requeridos en GitHub
 
+> **Importante:** Los nombres de secrets llevan prefijo `STADIUM_` para evitar conflictos con otros repositorios.
+
 | Secret | Descripción | Ejemplo |
 |--------|-------------|---------|
-| `SSH_USER` | Usuario SSH del servidor | `deploy` |
-| `SSH_PRIVATE_KEY` | Clave privada SSH | `-----BEGIN...` |
-| `JWT_SECRET` | Secret para JWT | `openssl rand -base64 32` |
+| `STADIUM_SSH_USER` | Usuario SSH del servidor | `deploy` |
+| `STADIUM_SSH_PRIVATE_KEY` | Clave privada SSH | `-----BEGIN...` |
+| `STADIUM_SSH_HOST` | IP del servidor | `179.27.76.130` |
+| `STADIUM_SSH_PORT` | Puerto SSH | `2224` |
 
 ### Configurar Secrets
 
 1. Ir a **Settings > Secrets and variables > Actions**
 2. Click **New repository secret**
-3. Agregar cada secret
+3. Agregar cada secret con el prefijo `STADIUM_`
 
 ### Generar SSH Key
 

@@ -59,11 +59,14 @@ Una vez que el código esté en GitHub, configura los secrets:
 
 ### En GitHub: Settings > Secrets and variables > Actions
 
+> **Nota:** Los secrets llevan prefijo `STADIUM_` para evitar conflictos con otros repos.
+
 | Secret | Valor | Descripción |
 |--------|-------|-------------|
-| `SSH_USER` | `deploy` (o tu usuario) | Usuario SSH del servidor |
-| `SSH_PRIVATE_KEY` | Contenido de tu clave privada | Para conectar al servidor |
-| `JWT_SECRET` | `openssl rand -base64 32` | Secret para JWT |
+| `STADIUM_SSH_USER` | `deploy` | Usuario SSH del servidor |
+| `STADIUM_SSH_HOST` | `179.27.76.130` | IP del servidor |
+| `STADIUM_SSH_PORT` | `2224` | Puerto SSH |
+| `STADIUM_SSH_PRIVATE_KEY` | Contenido de clave privada | Para conectar al servidor |
 
 ### Generar clave SSH para GitHub Actions
 
@@ -74,7 +77,7 @@ ssh-keygen -t ed25519 -C "github-actions@stadium-dashboard" -f ~/.ssh/github-act
 # Agregar clave pública al servidor
 ssh-copy-id -i ~/.ssh/github-actions-deploy.pub -p 2224 deploy@179.27.76.130
 
-# El contenido de esta clave privada va en SSH_PRIVATE_KEY
+# El contenido de esta clave privada va en STADIUM_SSH_PRIVATE_KEY
 cat ~/.ssh/github-actions-deploy
 ```
 
