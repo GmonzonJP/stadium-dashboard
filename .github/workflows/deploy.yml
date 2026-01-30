@@ -19,7 +19,7 @@ env:
   SSH_HOST: ${{ secrets.STADIUM_SSH_HOST }}
   SSH_PORT: ${{ secrets.STADIUM_SSH_PORT }}
   SSH_USER: ${{ secrets.STADIUM_SSH_USER }}
-  DEPLOY_PATH: /home/deploy/stadium-dashboard
+  DEPLOY_PATH: /home/aisrvadmin/stadium-dashboard
   PM2_APP_NAME: stadium-dashboard
 
 jobs:
