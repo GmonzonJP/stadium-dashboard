@@ -776,7 +776,9 @@ export async function GET(
         });
 
         // Calcular métricas adicionales
-        const precioVenta = Number(product.precioUnitarioLista) || 0;
+        // PVP = precio de lista desde ArticuloPrecio (igual que en /api/products/analysis)
+        const pvp = Number(product.precioUnitarioLista) || 0;
+        const precioVenta = pvp; // Mantener para compatibilidad
         const ultimoCostoValue = ultimaCompra ? Number(ultimaCompra.costoPromedio) * 1.22 : 0; // Con IVA
         
         // ASP (Precio Promedio de Venta) = Importe Total / Unidades Vendidas
@@ -853,6 +855,7 @@ export async function GET(
             primeraVentaFormatted: formatDate(product.primeraVenta),
             fechaUltCompraFormatted: formatDate(ultimaCompra?.fecha || null),
             precioVenta: precioVenta,
+            pvp: pvp, // PVP igual que en tabla de análisis
             // Nuevas métricas solicitadas
             asp: asp, // Precio Promedio de Venta
             margen: margen, // Margen %

@@ -181,7 +181,7 @@ export default function ProductoDetailPage() {
                                 <div className="bg-emerald-950/30 border border-emerald-900/50 rounded-xl p-4">
                                     <div className="text-xs text-emerald-400 font-semibold uppercase mb-1">PVP Lista</div>
                                     <div className="text-xl font-bold text-emerald-300">
-                                        ${Number(data?.precioVenta || 0).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                                        ${Number(data?.pvp || data?.precioVenta || 0).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
                                     </div>
                                 </div>
                                 <div className="bg-amber-950/30 border border-amber-900/50 rounded-xl p-4">

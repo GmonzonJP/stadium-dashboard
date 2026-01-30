@@ -386,7 +386,7 @@ export function ProductDetail({ productId, onClose, initialStartDate, initialEnd
                                                 stock={data?.stock || 0}
                                                 margenBruto={data?.margen || null}
                                                 costo={(data?.ultimoCosto || 0) * 1.22}
-                                                pvp={data?.precioVenta || 0}
+                                                pvp={data?.pvp || data?.precioVenta || 0}
                                                 unidadesVendidas={data?.unidadesVendidasDesdeUltCompra || 0}
                                                 unidadesCompradas={data?.unidadesCompradas || 0}
                                                 ultimoCosto={data?.ultimoCosto || 0}
