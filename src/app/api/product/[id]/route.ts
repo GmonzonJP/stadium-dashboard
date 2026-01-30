@@ -136,6 +136,16 @@ export async function GET(
 
     try {
         // Get basic product info from transacciones
+        // Primero obtenemos el PVP de ArticuloPrecio de forma independiente
+        const pvpQuery = `
+            SELECT MAX(Precio) as pvp
+            FROM ArticuloPrecio
+            WHERE baseCol = @articulo
+        `;
+
+        const pvpResult = await executeQuery(pvpQuery.replace(/@articulo/g, `'${articulo}'`));
+        const pvpFromArticuloPrecio = pvpResult.recordset[0]?.pvp || null;
+
         const baseInfoQuery = `
             SELECT
                 T.BaseCol,
@@ -148,7 +158,7 @@ export async function GET(
                 AR.descripcionCorta,
                 SUM(T.Cantidad) as unidades,
                 CAST(SUM(T.PRECIO) as decimal(18,2)) as Venta,
-                COALESCE(MAX(AP.Precio), MAX(T.PRECIO / NULLIF(T.Cantidad, 0))) as precioUnitarioLista,
+                MAX(T.PRECIO / NULLIF(T.Cantidad, 0)) as precioUnitarioTransaccion,
                 MIN(T.Fecha) as primeraVenta
             FROM Transacciones T
             INNER JOIN (
@@ -156,14 +166,6 @@ export async function GET(
                 FROM Articulos AR
                 GROUP BY AR.base, AR.descripcionCorta
             ) AR ON AR.BaseCol = T.BaseCol
-            LEFT JOIN (
-                -- ArticuloPrecio pre-agregado por baseCol
-                SELECT
-                    baseCol as BaseCol,
-                    MAX(Precio) as Precio
-                FROM ArticuloPrecio
-                GROUP BY baseCol
-            ) AP ON AP.BaseCol = T.BaseCol
             WHERE T.BaseCol = @articulo
             GROUP BY T.IdGenero, T.DescripcionGenero, T.BaseCol, AR.descripcionCorta, T.IdMarca, T.DescripcionMarca
             HAVING SUM(T.Cantidad) > 0
@@ -776,8 +778,9 @@ export async function GET(
         });
 
         // Calcular métricas adicionales
-        // PVP = precio de lista desde ArticuloPrecio (igual que en /api/products/analysis)
-        const pvp = Number(product.precioUnitarioLista) || 0;
+        // PVP = precio de lista desde ArticuloPrecio (consulta independiente para evitar problemas de GROUP BY)
+        // Si no hay precio en ArticuloPrecio, usar el precio unitario de transacciones como fallback
+        const pvp = Number(pvpFromArticuloPrecio) || Number(product.precioUnitarioTransaccion) || 0;
         const precioVenta = pvp; // Mantener para compatibilidad
         const ultimoCostoValue = ultimaCompra ? Number(ultimaCompra.costoPromedio) * 1.22 : 0; // Con IVA
         
