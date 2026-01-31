@@ -8,10 +8,15 @@ import {
   ProductoParaClasificar,
   ProductoClasificado,
   ProductoEstado,
+  SalesPerformance,
+  StockStatus,
   ProductStatusInfo,
+  StockStatusInfo,
   PRODUCT_STATUS_CONFIG,
+  STOCK_STATUS_CONFIG,
   DIAS_COMPRA_POR_MARCA,
   UMBRALES,
+  getSemanaCiclo,
 } from '@/types/sell-out';
 
 /**
@@ -57,65 +62,174 @@ export function calcularDiasParaVenderStock(
   return stockActual / paresPorDia;
 }
 
+// ============================================
+// NUEVA LÓGICA BASADA EN SEMANAS
+// ============================================
+
+/**
+ * Calcula las ventas promedio semanales
+ */
+export function calcularVentasPromedioSemanal(
+  unidadesVendidas: number,
+  diasTranscurridos: number
+): number | null {
+  if (diasTranscurridos <= 0 || unidadesVendidas < 0) {
+    return null;
+  }
+  const semanasTranscurridas = diasTranscurridos / 7;
+  if (semanasTranscurridas <= 0) return null;
+  return unidadesVendidas / semanasTranscurridas;
+}
+
+/**
+ * Calcula cuántas semanas se necesitan para agotar el stock actual
+ * WeeksToClear = StockActual / VentasPromedioSemanales
+ */
+export function calcularWeeksToClear(
+  stockActual: number,
+  ventasPromedioSemanal: number | null
+): number | null {
+  if (ventasPromedioSemanal === null || ventasPromedioSemanal <= 0 || stockActual < 0) {
+    return null;
+  }
+  return stockActual / ventasPromedioSemanal;
+}
+
+/**
+ * Calcula cuántas semanas quedan hasta el fin de la temporada/ciclo
+ * WeeksRemaining = SemanaCiclo - SemanasTranscurridas
+ */
+export function calcularWeeksRemaining(
+  diasTranscurridos: number,
+  semanaCicloMarca: number
+): number {
+  const semanasTranscurridas = diasTranscurridos / 7;
+  return Math.max(0, semanaCicloMarca - semanasTranscurridas);
+}
+
+/**
+ * Obtiene la información completa de estado de stock
+ */
+export function getStockStatusInfo(status: StockStatus): StockStatusInfo {
+  return {
+    status,
+    ...STOCK_STATUS_CONFIG[status],
+  };
+}
+
+/**
+ * Clasifica el estado de stock de un producto (Dimensión B)
+ * - ACTIVO: stock >= 30 Y weeksRemaining > 0
+ * - SALDO_BAJO_STOCK: stock < 30 unidades
+ * - SALDO_ARRASTRE: stock >= 30 Y weeksRemaining <= 0 (fuera de temporada)
+ */
+export function clasificarEstadoStock(
+  stockActual: number,
+  weeksRemaining: number
+): StockStatus {
+  // Saldo por bajo stock: menos de 30 unidades
+  if (stockActual < UMBRALES.stockMinimoLiquidacion) {
+    return 'SALDO_BAJO_STOCK';
+  }
+  // Saldo por arrastre: fuera de temporada pero con stock relevante
+  if (weeksRemaining <= 0) {
+    return 'SALDO_ARRASTRE';
+  }
+  // Stock activo normal
+  return 'ACTIVO';
+}
+
+/**
+ * Nueva clasificación de desempeño de venta usando semanas (Dimensión A)
+ *
+ * Lógica:
+ * - Si hay menos de 3 semanas de data → SIN_DATOS (no hay suficiente historial)
+ * - FAST_MOVER: WeeksToClear < WeeksRemaining × 0.5 (venderá en menos de la mitad del tiempo)
+ * - OK: WeeksToClear ≤ WeeksRemaining (dentro del plazo)
+ * - SLOW_MOVER: WeeksToClear > WeeksRemaining pero < WeeksRemaining × 2 (recuperable con acción)
+ * - CLAVO: WeeksToClear >= WeeksRemaining × 2 (no alcanzará sell-out sin liquidación)
+ */
+export function clasificarDesempenoVenta(
+  stockActual: number,
+  unidadesVendidas: number,
+  diasTranscurridos: number,
+  marca: string
+): SalesPerformance {
+  // Validaciones básicas
+  if (stockActual <= 0) {
+    return 'SIN_DATOS'; // Sin stock, nada que clasificar
+  }
+
+  const semanasTranscurridas = diasTranscurridos / 7;
+  const semanaCiclo = getSemanaCiclo(marca);
+
+  // Si no hay suficientes semanas de data, no clasificar
+  if (semanasTranscurridas < UMBRALES.semanasMinimosData) {
+    return 'SIN_DATOS';
+  }
+
+  // Si no hay ventas después de 3+ semanas, es CLAVO
+  if (unidadesVendidas <= 0) {
+    return 'CLAVO';
+  }
+
+  const ventasPromedioSemanal = calcularVentasPromedioSemanal(unidadesVendidas, diasTranscurridos);
+  const weeksToClear = calcularWeeksToClear(stockActual, ventasPromedioSemanal);
+  const weeksRemaining = calcularWeeksRemaining(diasTranscurridos, semanaCiclo);
+
+  // Si no se puede calcular weeksToClear, sin datos
+  if (weeksToClear === null) {
+    return 'SIN_DATOS';
+  }
+
+  // Si ya pasó el ciclo completo (weeksRemaining = 0)
+  if (weeksRemaining <= 0) {
+    // Cualquier stock restante es problemático
+    return weeksToClear > UMBRALES.factorRecuperable ? 'CLAVO' : 'SLOW_MOVER';
+  }
+
+  // CLAVO: No alcanzará sell-out ni con el doble de tiempo
+  if (weeksToClear >= weeksRemaining * UMBRALES.factorRecuperable) {
+    return 'CLAVO';
+  }
+
+  // SLOW_MOVER: Excede el plazo pero recuperable con promoción
+  if (weeksToClear > weeksRemaining) {
+    return 'SLOW_MOVER';
+  }
+
+  // FAST_MOVER: Venderá en menos de la mitad del tiempo restante
+  if (weeksToClear < weeksRemaining * 0.5) {
+    return 'FAST_MOVER';
+  }
+
+  // OK: Dentro del ritmo esperado
+  return 'OK';
+}
+
 /**
  * Clasifica un producto según su velocidad de venta
- *
- * Fórmula:
- * - diasRestantesEsperados = diasCompraEsperados - diasTranscurridos
- * - diasParaVenderStock = stockActual / paresPorDia
+ * NUEVA LÓGICA: Usa semanas (WeeksToClear vs WeeksRemaining)
  *
  * Clasificación:
- * - FAST_MOVER: diasParaVender < diasRestantes * 0.5 (termina mucho antes)
- * - OK: diasParaVender <= diasRestantes (en tiempo)
- * - SLOW_MOVER: diasParaVender > diasRestantes pero <= 365
- * - CLAVO: diasParaVender > 365 días
+ * - SIN_DATOS: menos de 3 semanas de historial
+ * - FAST_MOVER: WeeksToClear < WeeksRemaining × 0.5 (termina mucho antes)
+ * - OK: WeeksToClear ≤ WeeksRemaining (en tiempo)
+ * - SLOW_MOVER: WeeksToClear > WeeksRemaining (recuperable con promoción)
+ * - CLAVO: WeeksToClear >= WeeksRemaining × 2 (no alcanzará sell-out)
  */
 export function clasificarProducto(
   producto: ProductoParaClasificar
 ): ProductoEstado {
   const { stockActual, unidadesVendidas, diasDesde1raVentaUltimaCompra, marca } = producto;
 
-  // Si no hay datos suficientes
-  if (
-    stockActual <= 0 ||
-    unidadesVendidas <= 0 ||
-    diasDesde1raVentaUltimaCompra <= 0
-  ) {
-    return 'SIN_DATOS';
-  }
-
-  const diasCompraEsperados = getDiasCompraEsperados(marca);
-  const paresPorDia = calcularParesPorDia(unidadesVendidas, diasDesde1raVentaUltimaCompra);
-
-  if (paresPorDia === null || paresPorDia <= 0) {
-    return 'SIN_DATOS';
-  }
-
-  const diasParaVenderStock = calcularDiasParaVenderStock(stockActual, paresPorDia);
-
-  if (diasParaVenderStock === null) {
-    return 'SIN_DATOS';
-  }
-
-  const diasRestantesEsperados = Math.max(0, diasCompraEsperados - diasDesde1raVentaUltimaCompra);
-
-  // CLAVO: Más de 1 año para vender
-  if (diasParaVenderStock > UMBRALES.diasClavo) {
-    return 'CLAVO';
-  }
-
-  // SLOW_MOVER: Excede el plazo pero menos de 1 año
-  if (diasParaVenderStock > diasRestantesEsperados) {
-    return 'SLOW_MOVER';
-  }
-
-  // FAST_MOVER: Termina mucho antes (menos de la mitad del tiempo restante)
-  if (diasParaVenderStock < diasRestantesEsperados * 0.5 && diasRestantesEsperados > 0) {
-    return 'FAST_MOVER';
-  }
-
-  // OK: En ritmo esperado
-  return 'OK';
+  // Usar la nueva función de clasificación basada en semanas
+  return clasificarDesempenoVenta(
+    stockActual,
+    unidadesVendidas,
+    diasDesde1raVentaUltimaCompra,
+    marca
+  );
 }
 
 /**
@@ -137,29 +251,66 @@ export function esSaldo(stockTotal: number): boolean {
 
 /**
  * Clasificación completa de un producto con todos los datos calculados
+ * Ahora incluye ambas dimensiones: Desempeño de Venta + Estado de Stock
  */
 export function clasificarProductoCompleto(
   producto: ProductoParaClasificar
 ): ProductoClasificado {
   const { stockActual, unidadesVendidas, diasDesde1raVentaUltimaCompra, marca } = producto;
 
+  // Métricas legacy (días)
   const diasCompraEsperados = getDiasCompraEsperados(marca);
   const paresPorDia = calcularParesPorDia(unidadesVendidas, diasDesde1raVentaUltimaCompra);
   const diasParaVenderStock = calcularDiasParaVenderStock(stockActual, paresPorDia);
   const diasRestantesEsperados = Math.max(0, diasCompraEsperados - diasDesde1raVentaUltimaCompra);
 
-  const estado = clasificarProducto(producto);
-  const statusInfo = getProductStatusInfo(estado);
+  // Métricas nuevas (semanas)
+  const semanaCiclo = getSemanaCiclo(marca);
+  const semanasTranscurridas = diasDesde1raVentaUltimaCompra / 7;
+  const ventasPromedioSemanal = calcularVentasPromedioSemanal(unidadesVendidas, diasDesde1raVentaUltimaCompra);
+  const weeksToClear = calcularWeeksToClear(stockActual, ventasPromedioSemanal);
+  const weeksRemaining = calcularWeeksRemaining(diasDesde1raVentaUltimaCompra, semanaCiclo);
+
+  // Dimensión A: Desempeño de Venta (nueva lógica basada en semanas)
+  const salesPerformance = clasificarDesempenoVenta(
+    stockActual,
+    unidadesVendidas,
+    diasDesde1raVentaUltimaCompra,
+    marca
+  );
+  const statusInfo = getProductStatusInfo(salesPerformance);
+
+  // Dimensión B: Estado de Stock
+  const stockStatus = clasificarEstadoStock(stockActual, weeksRemaining);
+  const stockStatusInfo = getStockStatusInfo(stockStatus);
+
+  // Legacy: esSaldo se mantiene para compatibilidad
   const productoEsSaldo = esSaldo(stockActual);
 
   return {
     ...producto,
+    // Métricas legacy (días)
     paresPorDia,
     diasParaVenderStock,
     diasCompraEsperados,
     diasRestantesEsperados,
-    estado,
+
+    // Métricas nuevas (semanas)
+    weeksToClear,
+    weeksRemaining,
+    ventasPromedioSemanal,
+    semanasTranscurridas,
+
+    // Dimensión A: Desempeño de Venta
+    estado: salesPerformance, // alias para retrocompatibilidad
+    salesPerformance,
     statusInfo,
+
+    // Dimensión B: Estado de Stock
+    stockStatus,
+    stockStatusInfo,
+
+    // Legacy
     esSaldo: productoEsSaldo,
   };
 }

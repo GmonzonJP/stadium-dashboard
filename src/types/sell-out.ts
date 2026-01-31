@@ -20,13 +20,42 @@ export const UMBRALES = {
   diasClavo: 365,        // Más de 1 año
   stockMinimoLiquidacion: 30, // <30 por BaseCol = SALDO
   diasAlertaReabastecimiento: 4, // Sin venta en tienda >4 días
+  semanasMinimosData: 3, // Mínimo 3 semanas de data para clasificar desempeño
+  factorRecuperable: 2,  // SLOW si WeeksToClear < WeeksRemaining * 2, sino CLAVO
 } as const;
 
 // ============================================
-// TIPOS DE ESTADO DE PRODUCTO
+// VENTANA COMERCIAL POR MARCA (para calcular WeeksRemaining)
 // ============================================
 
-export type ProductoEstado = 'FAST_MOVER' | 'OK' | 'SLOW_MOVER' | 'CLAVO' | 'SIN_DATOS';
+export interface VentanaComercial {
+  marca: string;
+  weeksTotal: number; // Semanas totales de la temporada
+  descripcion: string;
+}
+
+// Semanas de ciclo de venta por marca
+export const SEMANAS_CICLO_POR_MARCA: Record<string, number> = {
+  'Adidas': 13,    // Quarter (13 semanas)
+  'default': 26,   // Semestre (26 semanas)
+};
+
+export function getSemanaCiclo(marca: string): number {
+  return SEMANAS_CICLO_POR_MARCA[marca] || SEMANAS_CICLO_POR_MARCA['default'];
+}
+
+// ============================================
+// TIPOS DE ESTADO DE PRODUCTO (DOS DIMENSIONES)
+// ============================================
+
+// Dimensión A: Desempeño de Venta (basado en WeeksToClear vs WeeksRemaining)
+export type SalesPerformance = 'FAST_MOVER' | 'OK' | 'SLOW_MOVER' | 'CLAVO' | 'SIN_DATOS';
+
+// Alias para retrocompatibilidad
+export type ProductoEstado = SalesPerformance;
+
+// Dimensión B: Estado de Stock
+export type StockStatus = 'ACTIVO' | 'SALDO_BAJO_STOCK' | 'SALDO_ARRASTRE';
 
 export interface ProductStatusInfo {
   estado: ProductoEstado;
@@ -41,31 +70,61 @@ export const PRODUCT_STATUS_CONFIG: Record<ProductoEstado, Omit<ProductStatusInf
     label: 'Fast',
     color: 'emerald',
     icon: 'Rocket',
-    descripcion: 'Termina antes del plazo esperado',
+    descripcion: 'Vende antes de lo esperado. Sin acción requerida.',
   },
   OK: {
     label: 'OK',
     color: 'blue',
     icon: 'CheckCircle',
-    descripcion: 'En ritmo esperado',
+    descripcion: 'Dentro del ritmo esperado. Monitorear.',
   },
   SLOW_MOVER: {
     label: 'Slow',
     color: 'amber',
     icon: 'Turtle',
-    descripcion: 'Excede el plazo de venta (180 días)',
+    descripcion: 'Por debajo del ritmo esperado. Considerar promoción.',
   },
   CLAVO: {
     label: 'Burn',
     color: 'red',
     icon: 'Flame',
-    descripcion: 'Excede 1 año, hay que liquidar',
+    descripcion: 'No alcanzará sell-out en la temporada. Requiere liquidación.',
   },
   SIN_DATOS: {
     label: '?',
     color: 'gray',
     icon: 'HelpCircle',
-    descripcion: 'Sin datos suficientes para clasificar',
+    descripcion: 'Menos de 3 semanas de datos para clasificar.',
+  },
+};
+
+// Configuración visual para Estado de Stock (Dimensión B)
+export interface StockStatusInfo {
+  status: StockStatus;
+  label: string;
+  color: 'blue' | 'purple' | 'orange';
+  icon: 'Package' | 'Archive' | 'AlertTriangle';
+  descripcion: string;
+}
+
+export const STOCK_STATUS_CONFIG: Record<StockStatus, Omit<StockStatusInfo, 'status'>> = {
+  ACTIVO: {
+    label: 'Activo',
+    color: 'blue',
+    icon: 'Package',
+    descripcion: 'Stock normal en circulación',
+  },
+  SALDO_BAJO_STOCK: {
+    label: 'Saldo',
+    color: 'purple',
+    icon: 'Archive',
+    descripcion: 'Stock residual (<30 unidades)',
+  },
+  SALDO_ARRASTRE: {
+    label: 'Arrastre',
+    color: 'orange',
+    icon: 'AlertTriangle',
+    descripcion: 'Fuera de temporada con stock relevante. Evaluar descuento.',
   },
 };
 
@@ -85,13 +144,29 @@ export interface ProductoParaClasificar {
 }
 
 export interface ProductoClasificado extends ProductoParaClasificar {
+  // Métricas calculadas (días - legacy)
   paresPorDia: number | null;
   diasParaVenderStock: number | null;
   diasCompraEsperados: number;
   diasRestantesEsperados: number;
-  estado: ProductoEstado;
+
+  // Métricas calculadas (semanas - nueva lógica)
+  weeksToClear: number | null;    // Semanas para agotar stock
+  weeksRemaining: number;         // Semanas hasta fin de temporada
+  ventasPromedioSemanal: number | null; // Ventas promedio por semana
+  semanasTranscurridas: number;   // Semanas desde primera venta
+
+  // Dimensión A: Desempeño de Venta
+  estado: ProductoEstado; // alias de salesPerformance para retrocompatibilidad
+  salesPerformance: SalesPerformance;
   statusInfo: ProductStatusInfo;
-  esSaldo: boolean; // stock < 30
+
+  // Dimensión B: Estado de Stock
+  stockStatus: StockStatus;
+  stockStatusInfo: StockStatusInfo;
+
+  // Legacy - mantener para compatibilidad
+  esSaldo: boolean; // stock < 30 (ahora usar stockStatus === 'SALDO_BAJO_STOCK')
 }
 
 // ============================================
@@ -124,8 +199,22 @@ export interface SellOutByProduct {
   diasStock: number | null;
   diasSinVenta: number;
   rotacion: number | null;
+
+  // Dimensión A: Desempeño de Venta
   estado: ProductoEstado;
+  salesPerformance: SalesPerformance;
   statusInfo: ProductStatusInfo;
+
+  // Dimensión B: Estado de Stock
+  stockStatus: StockStatus;
+  stockStatusInfo: StockStatusInfo;
+
+  // Métricas de semanas (nueva lógica)
+  weeksToClear: number | null;
+  weeksRemaining: number;
+  ventasPromedioSemanal: number | null;
+
+  // Legacy
   esSaldo: boolean;
   pvp: number | null;
   ultimoCosto: number | null;

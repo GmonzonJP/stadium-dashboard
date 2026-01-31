@@ -55,11 +55,24 @@ export function Sidebar({ onItemClick, activeId }: SidebarProps) {
                         
                         const Content = (
                             <>
-                                <item.icon size={22} className={cn(
-                                    "transition-colors shrink-0",
-                                    isHighlighted && !isActive ? "text-purple-400" : "",
-                                    isActive ? "text-blue-500" : "group-hover:text-blue-500"
-                                )} />
+                                <div className="relative">
+                                    <item.icon size={22} className={cn(
+                                        "transition-colors shrink-0",
+                                        isHighlighted && !isActive ? "text-purple-400" : "",
+                                        isActive ? "text-blue-500" : "group-hover:text-blue-500"
+                                    )} />
+                                    {/* Tooltip cuando está colapsado */}
+                                    {isCollapsed && (
+                                        <div className="absolute left-full ml-4 top-1/2 -translate-y-1/2 px-3 py-1.5 bg-slate-800 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-[100] pointer-events-none shadow-xl border border-slate-700">
+                                            <span className="font-medium">{item.label}</span>
+                                            {item.subtitle && (
+                                                <span className="text-slate-400 text-xs block">{item.subtitle}</span>
+                                            )}
+                                            {/* Flecha del tooltip */}
+                                            <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-slate-800" />
+                                        </div>
+                                    )}
+                                </div>
                                 {!isCollapsed && (
                                     <div className="flex flex-col flex-1 min-w-0">
                                         <span className={cn(

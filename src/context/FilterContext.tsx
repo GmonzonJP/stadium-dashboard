@@ -5,6 +5,7 @@ import { FilterData, FilterParams, FilterItem } from '@/types';
 import { NavItemId } from '@/components/Sidebar';
 
 export type ComparisonMode = '52weeks' | 'calendar';
+export type FilterSortOrder = 'sales' | 'alphabetical';
 
 interface FilterContextType {
     activeFilterId: NavItemId | null;
@@ -16,6 +17,8 @@ interface FilterContextType {
     toggleFilter: (category: keyof FilterParams, id: number) => void;
     comparisonMode: ComparisonMode;
     setComparisonMode: (mode: ComparisonMode) => void;
+    filterSortOrder: FilterSortOrder;
+    setFilterSortOrder: (order: FilterSortOrder) => void;
 }
 
 const FilterContext = createContext<FilterContextType | undefined>(undefined);
@@ -49,10 +52,22 @@ export function FilterProvider({ children }: { children: React.ReactNode }) {
         return '52weeks';
     });
 
-    // Guardar preferencia en localStorage
+    const [filterSortOrder, setFilterSortOrder] = useState<FilterSortOrder>(() => {
+        if (typeof window !== 'undefined') {
+            const saved = localStorage.getItem('filterSortOrder');
+            return (saved as FilterSortOrder) || 'sales';
+        }
+        return 'sales';
+    });
+
+    // Guardar preferencias en localStorage
     useEffect(() => {
         localStorage.setItem('comparisonMode', comparisonMode);
     }, [comparisonMode]);
+
+    useEffect(() => {
+        localStorage.setItem('filterSortOrder', filterSortOrder);
+    }, [filterSortOrder]);
 
     useEffect(() => {
         fetch('/api/filters')
@@ -84,7 +99,9 @@ export function FilterProvider({ children }: { children: React.ReactNode }) {
             isLoading,
             toggleFilter,
             comparisonMode,
-            setComparisonMode
+            setComparisonMode,
+            filterSortOrder,
+            setFilterSortOrder
         }}>
             {children}
         </FilterContext.Provider>

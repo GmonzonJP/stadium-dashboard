@@ -157,8 +157,18 @@ export async function POST(request: NextRequest) {
         rotacion: p.unidadesVendidas > 0 && p.stockActual > 0
           ? (p.unidadesVendidas / (p.unidadesVendidas + p.stockActual)) * 100
           : null,
+        // Dimensión A: Desempeño de Venta
         estado: p.estado,
+        salesPerformance: p.salesPerformance,
         statusInfo: p.statusInfo,
+        // Dimensión B: Estado de Stock
+        stockStatus: p.stockStatus,
+        stockStatusInfo: p.stockStatusInfo,
+        // Métricas de semanas
+        weeksToClear: p.weeksToClear,
+        weeksRemaining: p.weeksRemaining,
+        ventasPromedioSemanal: p.ventasPromedioSemanal,
+        // Legacy
         esSaldo: p.esSaldo,
         pvp: raw.PVP || null,
         ultimoCosto: raw.UltimoCosto || null,
