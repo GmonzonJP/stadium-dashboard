@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Check, Filter, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { FilterItem } from '@/types';
+import { useFilters } from '@/context/FilterContext';
 
 interface FilterPanelProps {
     title: string;
@@ -19,15 +20,26 @@ interface FilterPanelProps {
 
 export function FilterPanel({ title, isOpen, onClose, items, selectedIds, onToggle, onSelectAll, onClear }: FilterPanelProps) {
     const [searchQuery, setSearchQuery] = useState('');
+    const { filterSortOrder } = useFilters();
 
-    // Filtrar items según búsqueda
+    // Ordenar y filtrar items según preferencia del usuario
     const filteredItems = useMemo(() => {
-        if (!searchQuery.trim()) return items;
+        // Primero ordenar según preferencia
+        const sortedItems = [...items].sort((a, b) => {
+            if (filterSortOrder === 'alphabetical') {
+                return a.label.localeCompare(b.label, 'es');
+            }
+            // Por defecto: orden original (por ventas, viene del API)
+            return 0;
+        });
+
+        // Luego filtrar por búsqueda
+        if (!searchQuery.trim()) return sortedItems;
         const query = searchQuery.toLowerCase();
-        return items.filter(item =>
+        return sortedItems.filter(item =>
             item.label.toLowerCase().includes(query)
         );
-    }, [items, searchQuery]);
+    }, [items, searchQuery, filterSortOrder]);
 
     // Limpiar búsqueda cuando se cierra el panel
     const handleClose = () => {

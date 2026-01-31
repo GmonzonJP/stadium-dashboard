@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Search, Bell, User, Calendar, Settings, LogOut, ChevronDown, Users, Sun, Moon, Lightbulb, CalendarDays, RotateCcw } from 'lucide-react';
+import { Search, Bell, User, Calendar, Settings, LogOut, ChevronDown, Users, Sun, Moon, Lightbulb, CalendarDays, RotateCcw, ArrowDownAZ, TrendingUp } from 'lucide-react';
 import { DateRangePicker } from './DateRangePicker';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
@@ -20,7 +20,7 @@ export function TopBar({
 }) {
     const { user, logout } = useAuth();
     const { theme, toggleTheme } = useTheme();
-    const { comparisonMode, setComparisonMode } = useFilters();
+    const { comparisonMode, setComparisonMode, filterSortOrder, setFilterSortOrder } = useFilters();
     const [showUserMenu, setShowUserMenu] = useState(false);
     const [showSettingsMenu, setShowSettingsMenu] = useState(false);
     const [showNotificationsMenu, setShowNotificationsMenu] = useState(false);
@@ -155,6 +155,32 @@ export function TopBar({
                                                             <CalendarDays size={10} className="text-green-500 m-0.5" />
                                                         ) : (
                                                             <RotateCcw size={10} className="text-blue-500 m-0.5" />
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </button>
+
+                                            {/* Switch de Orden de Filtros */}
+                                            <button
+                                                onClick={() => setFilterSortOrder(filterSortOrder === 'sales' ? 'alphabetical' : 'sales')}
+                                                className="w-full flex items-center justify-between px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 rounded transition-colors"
+                                            >
+                                                <div className="flex items-center space-x-2">
+                                                    {filterSortOrder === 'sales' ? (
+                                                        <TrendingUp size={16} className="text-emerald-400" />
+                                                    ) : (
+                                                        <ArrowDownAZ size={16} className="text-purple-400" />
+                                                    )}
+                                                    <span className="text-xs">
+                                                        {filterSortOrder === 'sales' ? 'Por Ventas' : 'A-Z'}
+                                                    </span>
+                                                </div>
+                                                <div className={`relative w-10 h-5 rounded-full transition-colors ${filterSortOrder === 'alphabetical' ? 'bg-purple-500' : 'bg-emerald-500'}`}>
+                                                    <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${filterSortOrder === 'alphabetical' ? 'translate-x-5' : 'translate-x-0.5'}`}>
+                                                        {filterSortOrder === 'alphabetical' ? (
+                                                            <ArrowDownAZ size={10} className="text-purple-500 m-0.5" />
+                                                        ) : (
+                                                            <TrendingUp size={10} className="text-emerald-500 m-0.5" />
                                                         )}
                                                     </div>
                                                 </div>

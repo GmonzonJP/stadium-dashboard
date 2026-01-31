@@ -413,23 +413,23 @@ export function ProductDetail({ productId, onClose, initialStartDate, initialEnd
                                                         </h3>
                                                     </div>
                                                     <div className="flex-1 overflow-y-auto max-h-[320px] custom-scrollbar">
-                                                        <table className="w-full text-xs">
+                                                        <table className="w-full text-sm">
                                                             <thead className="bg-slate-50 dark:bg-slate-700/30 sticky top-0">
                                                                 <tr>
-                                                                    <th className="py-1.5 px-2 text-left font-semibold text-slate-600 dark:text-slate-400">Tienda</th>
-                                                                    <th className="py-1.5 px-2 text-center font-semibold text-slate-600 dark:text-slate-400">Un.</th>
-                                                                    <th className="py-1.5 px-2 text-right font-semibold text-slate-600 dark:text-slate-400">$</th>
+                                                                    <th className="py-2 px-3 text-left font-semibold text-slate-600 dark:text-slate-400 text-xs">Tienda</th>
+                                                                    <th className="py-2 px-3 text-center font-semibold text-slate-600 dark:text-slate-400 text-xs">Un.</th>
+                                                                    <th className="py-2 px-3 text-right font-semibold text-slate-600 dark:text-slate-400 text-xs">$</th>
                                                                 </tr>
                                                             </thead>
                                                             <tbody>
                                                                 {topTiendas.map((s: any, idx: number) => (
                                                                     <tr key={s.id} className="border-t border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                                                                        <td className="py-1.5 px-2 font-medium text-slate-800 dark:text-slate-200 truncate max-w-[100px]" title={s.descripcion}>
+                                                                        <td className="py-2 px-3 font-medium text-slate-800 dark:text-slate-200 truncate max-w-[100px] text-xs" title={s.descripcion}>
                                                                             <span className="text-slate-400 dark:text-slate-500 mr-1">{idx + 1}.</span>
                                                                             {s.descripcion?.replace('Stadium ', 'S')}
                                                                         </td>
-                                                                        <td className="py-1.5 px-2 text-center font-semibold text-slate-700 dark:text-slate-300">{s.ttlunidadesVenta || 0}</td>
-                                                                        <td className="py-1.5 px-2 text-right font-mono text-emerald-600 dark:text-emerald-400 text-[10px]">
+                                                                        <td className="py-2 px-3 text-center font-bold text-base text-slate-800 dark:text-slate-100">{s.ttlunidadesVenta || 0}</td>
+                                                                        <td className="py-2 px-3 text-right font-mono font-bold text-base text-emerald-600 dark:text-emerald-400">
                                                                             ${Number(s.ttlimporteVenta || 0).toLocaleString('es-AR', { maximumFractionDigits: 0, notation: 'compact' })}
                                                                         </td>
                                                                     </tr>

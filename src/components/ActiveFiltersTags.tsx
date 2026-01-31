@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { X } from 'lucide-react';
+import { X, Store, Tags, LayoutGrid, Users, Truck, LucideIcon } from 'lucide-react';
 import { FilterParams, FilterData } from '@/types';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -17,6 +17,14 @@ const filterLabels: Record<string, string> = {
     categories: 'Categoría',
     genders: 'Género',
     suppliers: 'Proveedor'
+};
+
+const filterIcons: Record<string, LucideIcon> = {
+    stores: Store,
+    brands: Tags,
+    categories: LayoutGrid,
+    genders: Users,
+    suppliers: Truck
 };
 
 const filterColors: Record<string, string> = {
@@ -64,6 +72,9 @@ export function ActiveFiltersTags({ selectedFilters, filterData, onRemoveFilter 
                         exit={{ opacity: 0, scale: 0.8 }}
                         className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium ${filterColors[filter.category] || 'bg-slate-500/10 text-slate-400 border-slate-500/20'}`}
                     >
+                        {filterIcons[filter.category] && (
+                            React.createElement(filterIcons[filter.category], { size: 12, className: "opacity-70" })
+                        )}
                         <span className="font-semibold text-[10px] uppercase tracking-wider opacity-70">
                             {filter.categoryLabel}:
                         </span>

@@ -38,7 +38,7 @@ function calcularVariacion(actual: number, anterior: number): number | null {
 function ComparativoCell({ actual, anterior, isMoney = false }: { actual: number; anterior?: number; isMoney?: boolean }) {
     if (anterior === undefined || anterior === null) {
         return (
-            <span className={cn("tabular-nums", isMoney ? "text-emerald-400" : "text-slate-300")}>
+            <span className={cn("tabular-nums text-base font-bold", isMoney ? "text-emerald-400" : "text-slate-300")}>
                 {isMoney ? '$' : ''}{actual?.toLocaleString()}
             </span>
         );
@@ -53,16 +53,16 @@ function ComparativoCell({ actual, anterior, isMoney = false }: { actual: number
         <div className="flex flex-col items-end">
             <div className="flex items-center gap-1.5">
                 <span className={cn(
-                    "tabular-nums font-bold",
+                    "tabular-nums font-bold text-base",
                     esMayor ? "text-emerald-400" : esMenor ? "text-red-400" : "text-slate-300"
                 )}>
                     {isMoney ? '$' : ''}{actual?.toLocaleString()}
                 </span>
-                {esMayor && <TrendingUp size={12} className="text-emerald-400" />}
-                {esMenor && <TrendingDown size={12} className="text-red-400" />}
-                {!esMayor && !esMenor && <Minus size={12} className="text-slate-500" />}
+                {esMayor && <TrendingUp size={14} className="text-emerald-400" />}
+                {esMenor && <TrendingDown size={14} className="text-red-400" />}
+                {!esMayor && !esMenor && <Minus size={14} className="text-slate-500" />}
             </div>
-            <div className="flex items-center gap-1 text-[10px] text-slate-500">
+            <div className="flex items-center gap-1 text-xs text-slate-500">
                 <span>vs {isMoney ? '$' : ''}{anterior?.toLocaleString()}</span>
                 {variacion !== null && (
                     <span className={cn(
@@ -316,11 +316,11 @@ export function PinnedMetricTable({ id, title, groupBy, groupByLabel, onClose, s
                                         <td className="p-3 text-white font-medium truncate max-w-[200px]">{item.label || 'N/A'}</td>
                                         <td className="p-3 text-right">
                                             {isStockMetric ? (
-                                                <span className="text-cyan-400 tabular-nums font-bold">{item.units?.toLocaleString()}</span>
+                                                <span className="text-cyan-400 tabular-nums font-bold text-base">{item.units?.toLocaleString()}</span>
                                             ) : hasComparison ? (
                                                 <ComparativoCell actual={item.units} anterior={item.unitsAnterior} />
                                             ) : (
-                                                <span className="text-slate-300 tabular-nums font-bold">{item.units?.toLocaleString()}</span>
+                                                <span className="text-slate-300 tabular-nums font-bold text-base">{item.units?.toLocaleString()}</span>
                                             )}
                                         </td>
                                         {!isStockMetric && (
@@ -329,7 +329,7 @@ export function PinnedMetricTable({ id, title, groupBy, groupByLabel, onClose, s
                                                     {hasComparison ? (
                                                         <ComparativoCell actual={item.sales} anterior={item.salesAnterior} isMoney />
                                                     ) : (
-                                                        <span className="text-emerald-400 tabular-nums font-bold">${item.sales?.toLocaleString()}</span>
+                                                        <span className="text-emerald-400 tabular-nums font-bold text-base">${item.sales?.toLocaleString()}</span>
                                                     )}
                                                 </td>
                                                 <td className="p-3 text-right tabular-nums">
@@ -356,11 +356,11 @@ export function PinnedMetricTable({ id, title, groupBy, groupByLabel, onClose, s
                                 <td className="p-3 text-slate-400">TOTAL</td>
                                 <td className="p-3 text-right">
                                     {isStockMetric ? (
-                                        <span className="text-cyan-400">{totalUnits.toLocaleString()}</span>
+                                        <span className="text-cyan-400 text-base font-bold">{totalUnits.toLocaleString()}</span>
                                     ) : hasAnyComparison ? (
                                         <ComparativoCell actual={totalUnits} anterior={totalUnitsAnterior} />
                                     ) : (
-                                        <span className="text-white">{totalUnits.toLocaleString()}</span>
+                                        <span className="text-white text-base font-bold">{totalUnits.toLocaleString()}</span>
                                     )}
                                 </td>
                                 {!isStockMetric && (
@@ -369,7 +369,7 @@ export function PinnedMetricTable({ id, title, groupBy, groupByLabel, onClose, s
                                             {hasAnyComparison ? (
                                                 <ComparativoCell actual={totalSales} anterior={totalSalesAnterior} isMoney />
                                             ) : (
-                                                <span className="text-emerald-500">${totalSales.toLocaleString()}</span>
+                                                <span className="text-emerald-500 text-base font-bold">${totalSales.toLocaleString()}</span>
                                             )}
                                         </td>
                                         <td className="p-3"></td>
