@@ -837,6 +837,79 @@ export async function GET(
             ? ((aspPeriodo - ultimoCostoValue) / aspPeriodo) * 100
             : null;
 
+        // ============================================
+        // HISTORIAL ANUAL DEL PRODUCTO
+        // ============================================
+        // Obtener ventas, margen y precio promedio por año
+        const historialAnualQuery = `
+            SELECT
+                YEAR(T.Fecha) as anio,
+                SUM(T.Cantidad) as unidadesVendidas,
+                CAST(SUM(T.PRECIO) as decimal(18,2)) as importeVenta,
+                AVG(T.PRECIO / NULLIF(T.Cantidad, 0)) as precioPromedio,
+                MIN(T.Fecha) as primeraVentaAnio,
+                MAX(T.Fecha) as ultimaVentaAnio
+            FROM Transacciones T
+            WHERE T.BaseCol = @articulo
+            GROUP BY YEAR(T.Fecha)
+            ORDER BY anio DESC
+        `;
+
+        let historialAnual: Array<{
+            anio: number;
+            unidadesVendidas: number;
+            importeVenta: number;
+            precioPromedio: number;
+            margenPromedio: number | null;
+            porcentajeVendido: number | null;
+        }> = [];
+
+        try {
+            const historialResult = await executeQuery(historialAnualQuery.replace(/@articulo/g, `'${articulo}'`));
+
+            // Calcular totales para porcentajes
+            const totalVendidasHistorico = historialResult.recordset.reduce(
+                (sum: number, row: any) => sum + (Number(row.unidadesVendidas) || 0), 0
+            );
+
+            historialAnual = historialResult.recordset.map((row: any) => {
+                const precio = Number(row.precioPromedio) || 0;
+                const margen = precio > 0 && ultimoCostoValue > 0
+                    ? ((precio - ultimoCostoValue) / precio) * 100
+                    : null;
+                const porcentaje = totalVendidasHistorico > 0
+                    ? (Number(row.unidadesVendidas) / totalVendidasHistorico) * 100
+                    : null;
+
+                return {
+                    anio: row.anio,
+                    unidadesVendidas: Number(row.unidadesVendidas) || 0,
+                    importeVenta: Number(row.importeVenta) || 0,
+                    precioPromedio: precio,
+                    margenPromedio: margen,
+                    porcentajeVendido: porcentaje
+                };
+            });
+
+            console.log(`Historial anual for ${articulo}:`, historialAnual.length, 'años');
+        } catch (err) {
+            console.error('Error getting historial anual:', err);
+        }
+
+        // Calcular número de temporadas (años con actividad)
+        const temporadas = historialAnual.length;
+        const primeraCompraAnio = historialAnual.length > 0
+            ? Math.min(...historialAnual.map(h => h.anio))
+            : null;
+
+        // Detectar si es producto CARRYOVER (primera venta antes de última compra)
+        // Carryover = producto que se vende todo el año (no es estacional)
+        const primeraVentaDate = product.primeraVenta ? new Date(product.primeraVenta) : null;
+        const ultimaCompraDate = ultimaCompra?.fecha ? new Date(ultimaCompra.fecha) : null;
+        const esCarryover = primeraVentaDate && ultimaCompraDate
+            ? primeraVentaDate < ultimaCompraDate
+            : false;
+
         const response = NextResponse.json({
             ...product,
             sucursales: sucursales,
@@ -879,7 +952,13 @@ export async function GET(
                 fechaInicio: startDate,
                 fechaFin: endDate,
                 tieneFiltroPeriodo: !!(startDate && endDate)
-            }
+            },
+            // Historial por año
+            historialAnual: historialAnual,
+            temporadas: temporadas,
+            primeraCompraAnio: primeraCompraAnio,
+            // Tipo de producto
+            esCarryover: esCarryover // true = se vende todo el año, false = estacional
         });
 
         // Add no-cache headers
