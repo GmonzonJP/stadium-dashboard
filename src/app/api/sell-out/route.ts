@@ -53,14 +53,21 @@ export async function POST(request: NextRequest) {
       UltimaCompraInfo AS (
         -- JOIN con Articulos para obtener Base correcto (no usar BaseArticulo directamente)
         SELECT
-          A.Base as BaseCol,
-          MAX(UC.FechaUltimaCompra) as FechaUltimaCompra,
-          SUM(UC.CantidadUltimaCompra) as CantidadUltimaCompra,
-          MAX(UC.UltimoCosto) as UltimoCosto
-        FROM UltimaCompra UC
-        INNER JOIN Articulos A ON A.IdArticulo = UC.BaseArticulo
-        WHERE UC.FechaUltimaCompra IS NOT NULL
-        GROUP BY A.Base
+          BaseCol,
+          MAX(FechaUltimaCompra) as FechaUltimaCompra,
+          SUM(CantidadUltimaCompra) as CantidadUltimaCompra,
+          MAX(UltimoCosto) as UltimoCosto
+        FROM (
+          SELECT
+            A.Base as BaseCol,
+            UC.FechaUltimaCompra,
+            UC.CantidadUltimaCompra,
+            UC.UltimoCosto
+          FROM UltimaCompra UC
+          INNER JOIN Articulos A ON A.IdArticulo = UC.BaseArticulo
+          WHERE UC.FechaUltimaCompra IS NOT NULL
+        ) AS UCJoined
+        GROUP BY BaseCol
       ),
       PrimeraVentaDesdeCompra AS (
         -- JOIN con Articulos para obtener Base correcto
@@ -77,6 +84,32 @@ export async function POST(request: NextRequest) {
         WHERE T.Fecha >= UCI.FechaUltimaCompra
           AND T.Cantidad > 0
         GROUP BY T.BaseCol
+      ),
+      VentasDesdeCompra AS (
+        -- Unidades vendidas desde la última compra (para clasificación de estacionales)
+        SELECT
+          T.BaseCol,
+          SUM(T.Cantidad) as UnidadesDesdeCompra
+        FROM Transacciones T
+        INNER JOIN (
+          SELECT A.Base as BaseCol, MAX(UC.FechaUltimaCompra) as FechaUltimaCompra
+          FROM UltimaCompra UC
+          INNER JOIN Articulos A ON A.IdArticulo = UC.BaseArticulo
+          GROUP BY A.Base
+        ) UCI ON T.BaseCol = UCI.BaseCol
+        WHERE T.Fecha >= UCI.FechaUltimaCompra
+          AND T.Cantidad > 0
+        GROUP BY T.BaseCol
+      ),
+      Ventas180Dias AS (
+        -- Unidades vendidas en últimos 180 días (para clasificación de carryover)
+        SELECT
+          T.BaseCol,
+          SUM(T.Cantidad) as Unidades180Dias
+        FROM Transacciones T
+        WHERE T.Fecha >= DATEADD(DAY, -180, GETDATE())
+          AND T.Cantidad > 0
+        GROUP BY T.BaseCol
       )
       ,
       PrecioVenta AS (
@@ -85,6 +118,15 @@ export async function POST(request: NextRequest) {
           MAX(Precio) as PVP
         FROM ArticuloPrecio
         GROUP BY baseCol
+      ),
+      PrimeraVentaGlobal AS (
+        -- Primera venta del producto en toda la historia (para detectar carryover)
+        SELECT
+          T.BaseCol,
+          MIN(T.Fecha) as PrimeraVentaGlobal
+        FROM Transacciones T
+        WHERE T.Cantidad > 0
+        GROUP BY T.BaseCol
       )
       SELECT
         PV.BaseCol,
@@ -99,12 +141,24 @@ export async function POST(request: NextRequest) {
         UCI.UltimoCosto,
         PVDC.PrimeraVentaDesdeUltimaCompra,
         DATEDIFF(DAY, PVDC.PrimeraVentaDesdeUltimaCompra, GETDATE()) as DiasDesde1raVentaUltimaCompra,
-        COALESCE(PRV.PVP, PV.MaxPrecioUnitario) as PVP
+        DATEDIFF(DAY, UCI.FechaUltimaCompra, GETDATE()) as DiasDesdeUltimaCompra,
+        COALESCE(VDC.UnidadesDesdeCompra, PV.UnidadesVendidas) as UnidadesDesdeCompra,
+        COALESCE(V180.Unidades180Dias, PV.UnidadesVendidas) as Unidades180Dias,
+        COALESCE(PRV.PVP, PV.MaxPrecioUnitario) as PVP,
+        PVG.PrimeraVentaGlobal,
+        -- Carryover: si la primera venta global es anterior a la última compra
+        CASE
+          WHEN PVG.PrimeraVentaGlobal < UCI.FechaUltimaCompra THEN 1
+          ELSE 0
+        END as EsCarryover
       FROM ProductoVentas PV
       LEFT JOIN ProductoStock PS ON PV.BaseCol = PS.BaseCol
       LEFT JOIN UltimaCompraInfo UCI ON PV.BaseCol = UCI.BaseCol
       LEFT JOIN PrimeraVentaDesdeCompra PVDC ON PV.BaseCol = PVDC.BaseCol
+      LEFT JOIN VentasDesdeCompra VDC ON PV.BaseCol = VDC.BaseCol
+      LEFT JOIN Ventas180Dias V180 ON PV.BaseCol = V180.BaseCol
       LEFT JOIN PrecioVenta PRV ON PV.BaseCol = PRV.BaseCol
+      LEFT JOIN PrimeraVentaGlobal PVG ON PV.BaseCol = PVG.BaseCol
       ORDER BY PV.VentaTotal DESC
     `;
 
@@ -127,23 +181,44 @@ export async function POST(request: NextRequest) {
     const result = await pool.request().query(query);
     const rawProducts = result.recordset;
 
-    // Clasificar productos
-    const productosParaClasificar: ProductoParaClasificar[] = rawProducts.map((row: any) => ({
-      BaseCol: row.BaseCol,
-      DescripcionMarca: row.DescripcionMarca,
-      marca: row.DescripcionMarca,
-      stockActual: row.StockTotal || 0,
-      unidadesVendidas: row.UnidadesVendidas || 0,
-      diasDesde1raVentaUltimaCompra: row.DiasDesde1raVentaUltimaCompra || 0,
-      fechaPrimeraVentaUltimaCompra: row.PrimeraVentaDesdeUltimaCompra,
-      fechaUltimaCompra: row.FechaUltimaCompra,
-    }));
+    // Clasificar productos:
+    // - CARRYOVER (venden todo el año): usar últimos 180 días
+    // - ESTACIONALES (nuevos después de compra): usar días desde última compra
+    const VENTANA_CARRYOVER = 180;
+
+    const productosParaClasificar: ProductoParaClasificar[] = rawProducts.map((row: any) => {
+      const esCarryover = row.EsCarryover === 1;
+
+      // Para carryover: usar 180 días
+      // Para estacionales: usar días desde última compra
+      const unidadesParaClasificar = esCarryover
+        ? (row.Unidades180Dias || row.UnidadesVendidas || 0)
+        : (row.UnidadesDesdeCompra || row.UnidadesVendidas || 0);
+
+      const diasParaClasificar = esCarryover
+        ? VENTANA_CARRYOVER
+        : (row.DiasDesdeUltimaCompra || row.DiasDesde1raVentaUltimaCompra || 0);
+
+      return {
+        BaseCol: row.BaseCol,
+        DescripcionMarca: row.DescripcionMarca,
+        marca: row.DescripcionMarca,
+        stockActual: row.StockTotal || 0,
+        unidadesVendidas: unidadesParaClasificar,
+        diasDesde1raVentaUltimaCompra: diasParaClasificar,
+        fechaPrimeraVentaUltimaCompra: row.PrimeraVentaDesdeUltimaCompra,
+        fechaUltimaCompra: row.FechaUltimaCompra,
+        // Campos adicionales para el response
+        esCarryover,
+      };
+    });
 
     const { clasificados, estadisticas } = clasificarProductos(productosParaClasificar);
 
     // Mapear a formato de respuesta
     const byProduct: SellOutByProduct[] = clasificados.map((p, idx) => {
       const raw = rawProducts[idx];
+      const productoClasificado = productosParaClasificar[idx];
       return {
         BaseCol: p.BaseCol,
         descripcionMarca: p.DescripcionMarca || p.marca || '',
@@ -168,6 +243,9 @@ export async function POST(request: NextRequest) {
         weeksToClear: p.weeksToClear,
         weeksRemaining: p.weeksRemaining,
         ventasPromedioSemanal: p.ventasPromedioSemanal,
+        // Tipo de producto
+        esCarryover: productoClasificado.esCarryover || false,
+        primeraVentaGlobal: raw.PrimeraVentaGlobal || null,
         // Legacy
         esSaldo: p.esSaldo,
         pvp: raw.PVP || null,

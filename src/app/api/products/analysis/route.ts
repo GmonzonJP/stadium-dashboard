@@ -43,6 +43,12 @@ export async function POST(req: NextRequest) {
         fechaInicioVentana.setDate(fechaInicioVentana.getDate() - ventanaRitmoDias);
         const fechaInicioVentanaStr = fechaInicioVentana.toISOString().split('T')[0];
 
+        // Ventana fija de 180 días para clasificación de productos (independiente del filtro)
+        const VENTANA_CLASIFICACION_DIAS = 180;
+        const fechaInicioClasificacion = new Date(hoy);
+        fechaInicioClasificacion.setDate(fechaInicioClasificacion.getDate() - VENTANA_CLASIFICACION_DIAS);
+        const fechaInicioClasificacionStr = fechaInicioClasificacion.toISOString().split('T')[0];
+
         // Query principal para análisis de productos con datos para semáforo
         // IMPORTANTE: Usamos Articulos.Base para obtener el código base correcto
         // NO usamos SUBSTRING porque los códigos base pueden tener longitudes variables
@@ -79,7 +85,31 @@ export async function POST(req: NextRequest) {
                     WHERE TV.BaseCol = T.BaseCol
                     AND TV.Fecha >= '${fechaInicioVentanaStr}'
                     AND TV.Cantidad > 0
-                ) as unidades_ventana
+                ) as unidades_ventana,
+                -- Unidades vendidas en últimos 180 días (fallback)
+                (
+                    SELECT ISNULL(SUM(TV.Cantidad), 0)
+                    FROM Transacciones TV
+                    WHERE TV.BaseCol = T.BaseCol
+                    AND TV.Fecha >= '${fechaInicioClasificacionStr}'
+                    AND TV.Cantidad > 0
+                ) as unidades_180dias,
+                -- Unidades vendidas desde última compra (para clasificación)
+                (
+                    SELECT ISNULL(SUM(TV.Cantidad), 0)
+                    FROM Transacciones TV
+                    WHERE TV.BaseCol = T.BaseCol
+                    AND TV.Fecha >= ISNULL(
+                        (SELECT MAX(FUC) FROM (
+                            SELECT MAX(UC2.FechaUltimaCompra) as FUC
+                            FROM UltimaCompra UC2
+                            INNER JOIN Articulos A2 ON A2.IdArticulo = UC2.BaseArticulo
+                            WHERE A2.Base = T.BaseCol
+                        ) SubUC),
+                        '${fechaInicioClasificacionStr}'
+                    )
+                    AND TV.Cantidad > 0
+                ) as unidades_desde_compra
             FROM Transacciones T
             LEFT JOIN (
                 SELECT Base, MAX(DescripcionCorta) as DescripcionCorta
@@ -173,6 +203,8 @@ export async function POST(req: NextRequest) {
             const pvp = toNumber(row.pvp) || 0;
             const asp = toNumber(row.precio_promedio_asp);
             const unidadesVentana = toNumber(row.unidades_ventana) || 0;
+            const unidades180dias = toNumber(row.unidades_180dias) || 0;
+            const unidadesDesdeCompra = toNumber(row.unidades_desde_compra) || 0;
             const ultimaCompraFecha = row.ultima_compra_fecha ? new Date(row.ultima_compra_fecha).toISOString().split('T')[0] : null;
 
             // Calcular días desde última compra
@@ -182,9 +214,13 @@ export async function POST(req: NextRequest) {
                 diasDesdeCompra = Math.floor((hoy.getTime() - fechaUltimaCompra.getTime()) / (1000 * 60 * 60 * 24));
             }
 
-            // Calcular métricas con utilidades seguras
-            const diasStock = calculateDiasStockFromPeriod(stock.stock_total, unidades, durationDays);
-            const paresPorDia = calculateParesPorDia(unidades, durationDays);
+            // Calcular métricas usando el período desde última compra (mejor para productos estacionales)
+            // Si no hay fecha de última compra, usar 180 días como fallback
+            const diasPeriodo = diasDesdeCompra > 0 ? diasDesdeCompra : VENTANA_CLASIFICACION_DIAS;
+            const unidadesPeriodo = diasDesdeCompra > 0 ? unidadesDesdeCompra : unidades180dias;
+
+            const paresPorDia = calculateParesPorDia(unidadesPeriodo, diasPeriodo);
+            const diasStock = calculateDiasStockFromPeriod(stock.stock_total, unidadesPeriodo, diasPeriodo);
             const margen = calculateMargen(asp, costo);
             const markup = calculateMarkup(asp, costo);
             const sellThrough = calculateSellThrough(unidades, stock.stock_total);
@@ -263,12 +299,14 @@ export async function POST(req: NextRequest) {
                 hasMore: page < totalPages
             },
             duration_days: durationDays,
+            ventana_clasificacion_dias: VENTANA_CLASIFICACION_DIAS,
             ventana_semaforo_dias: ventanaRitmoDias,
             meta: {
                 stockSource: 'MovStockTotalResumen',
                 aspFormula: 'venta_total / unidades',
                 margenFormula: '(precio - costo) / precio * 100',
-                markupFormula: '(precio - costo) / costo * 100'
+                markupFormula: '(precio - costo) / costo * 100',
+                clasificacionNota: 'Días Stock y Pares/Día calculados desde última compra (o 180 días si no hay compra)'
             }
         });
 

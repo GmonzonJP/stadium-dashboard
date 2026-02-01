@@ -10,6 +10,7 @@ import { ProductStatusBadge, SaldoBadge } from './ProductStatusBadge';
 import { UnifiedTallaTable } from './ProductDetail/UnifiedTallaTable';
 import { RelatedColors } from './ProductDetail/RelatedColors';
 import { ProductMetricsGrid } from './ProductDetail/ProductMetricsGrid';
+import { HistorialAnual } from './ProductDetail/HistorialAnual';
 import { clasificarProductoCompleto } from '@/lib/producto-classifier';
 import { DEPOSITOS_CONFIG, UMBRALES } from '@/types/sell-out';
 
@@ -375,6 +376,11 @@ export function ProductDetail({ productId, onClose, initialStartDate, initialEnd
                                                         <ProductStatusBadge estado={clasificacion.estado} size="lg" />
                                                     )}
                                                     {esSaldo && <SaldoBadge size="md" />}
+                                                    {data?.esCarryover && (
+                                                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-300" title="Producto que se vende todo el año (no estacional)">
+                                                            🔄 Carryover
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </div>
 
@@ -400,6 +406,16 @@ export function ProductDetail({ productId, onClose, initialStartDate, initialEnd
                                                         : undefined
                                                 }
                                             />
+
+                                            {/* Historial Anual - Debajo de métricas */}
+                                            {data?.historialAnual && data.historialAnual.length > 0 && (
+                                                <HistorialAnual
+                                                    historial={data.historialAnual}
+                                                    temporadas={data.temporadas || 1}
+                                                    primeraCompraAnio={data.primeraCompraAnio}
+                                                    stockActual={data.stock || 0}
+                                                />
+                                            )}
                                         </div>
 
                                         {/* Right Column: Top Ventas por Tienda */}
