@@ -5,7 +5,9 @@
 // Configuración de depósitos
 export const DEPOSITOS_CONFIG = {
   central: [99, 999],
-  outlet: [31, 32],
+  outlet: [31, 32, 117, 131, 940], // STADIUM117, STADIUM131-SALDOS, OUTLET_Fuera_Temporada_940
+  web: [701, 702, 704], // Tiendas WEB - NO MOSTRAR STOCK
+  ocultar: [91, 802, 900, 902, 903], // Z_No_Disponible91, Venta X Mayor_802, DETALLES_900, RECLAMO_902, DESCARTE_903
 } as const;
 
 // Días de compra esperados por marca
@@ -141,6 +143,8 @@ export interface ProductoParaClasificar {
   diasDesde1raVentaUltimaCompra: number;
   fechaPrimeraVentaUltimaCompra?: Date | null;
   fechaUltimaCompra?: Date | null;
+  // Carryover: producto con ventas antes de la última compra (se vende todo el año)
+  esCarryover?: boolean;
 }
 
 export interface ProductoClasificado extends ProductoParaClasificar {
@@ -213,6 +217,10 @@ export interface SellOutByProduct {
   weeksToClear: number | null;
   weeksRemaining: number;
   ventasPromedioSemanal: number | null;
+
+  // Tipo de producto
+  esCarryover?: boolean;        // Producto que se vende todo el año
+  primeraVentaGlobal?: Date | string | null; // Primera venta en toda la historia
 
   // Legacy
   esSaldo: boolean;
