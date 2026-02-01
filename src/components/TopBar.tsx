@@ -47,7 +47,7 @@ export function TopBar({
 
 
     return (
-        <header className="h-16 border-b border-slate-800 bg-[#020617]/50 backdrop-blur-xl sticky top-0 z-40 px-8 flex items-center justify-between ml-20 lg:ml-64 transition-all duration-300">
+        <header className="h-16 border-b border-slate-800 bg-[#020617]/50 backdrop-blur-xl sticky top-0 z-40 px-8 flex items-center justify-between transition-all duration-300">
             <div className="flex items-center flex-1 max-w-xl">
                 <div className="relative w-full group">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-blue-500 transition-colors" size={18} />

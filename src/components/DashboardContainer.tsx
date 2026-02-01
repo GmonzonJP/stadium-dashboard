@@ -54,16 +54,16 @@ export function DashboardContainer({
     const activeData = getActiveFilterData();
 
     return (
-        <div className="flex">
+        <div className="min-h-screen overflow-x-hidden">
             <Sidebar activeId={activeFilterId || 'home'} onItemClick={handleSidebarClick} />
-            <div className="flex-1 flex flex-col min-h-screen">
-                <TopBar 
+            <div className="ml-20 flex flex-col min-h-screen overflow-hidden">
+                <TopBar
                     onOpenUserManagement={() => setShowUserManagement(true)}
                     alertsData={alertsData}
                     isLoadingAlerts={isLoadingAlerts}
                 />
-                <main className="flex-1 ml-20 transition-all duration-300">
-                    <div className="p-4 md:p-8 max-w-full mx-auto">
+                <main className="flex-1 overflow-x-hidden overflow-y-auto">
+                    <div className="p-4 md:p-6">
                         {children}
                     </div>
                 </main>

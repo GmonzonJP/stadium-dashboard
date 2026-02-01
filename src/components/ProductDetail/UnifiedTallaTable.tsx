@@ -27,31 +27,43 @@ export function UnifiedTallaTable({
   tiendas,
   stockCentralPorTalla,
 }: UnifiedTallaTableProps) {
-  // Separar tiendas por tipo
-  const { centrales, regulares, outlets } = useMemo(() => {
+  // Separar tiendas por tipo (filtrar las ocultas)
+  const { centrales, regulares, outlets, web } = useMemo(() => {
     const centralIds = DEPOSITOS_CONFIG.central as readonly number[];
     const outletIds = DEPOSITOS_CONFIG.outlet as readonly number[];
-    const centrales = tiendas.filter(t => centralIds.includes(t.id));
-    const outlets = tiendas.filter(t => outletIds.includes(t.id));
-    const regulares = tiendas.filter(
-      t => !centralIds.includes(t.id) && !outletIds.includes(t.id)
+    const webIds = DEPOSITOS_CONFIG.web as readonly number[];
+    const ocultarIds = DEPOSITOS_CONFIG.ocultar as readonly number[];
+
+    // Filtrar las tiendas que deben ocultarse
+    const tiendasVisibles = tiendas.filter(t => !ocultarIds.includes(t.id));
+
+    const centrales = tiendasVisibles.filter(t => centralIds.includes(t.id));
+    const outlets = tiendasVisibles.filter(t => outletIds.includes(t.id));
+    const web = tiendasVisibles.filter(t => webIds.includes(t.id));
+    const regulares = tiendasVisibles.filter(
+      t => !centralIds.includes(t.id) && !outletIds.includes(t.id) && !webIds.includes(t.id)
     );
-    return { centrales, regulares, outlets };
+    return { centrales, regulares, outlets, web };
   }, [tiendas]);
 
-  // Calcular totales de stock y ventas por talla
+  // Calcular totales de stock y ventas por talla (excluyendo ocultas y web para stock)
+  const ocultarIds = DEPOSITOS_CONFIG.ocultar as readonly number[];
+  const webIds = DEPOSITOS_CONFIG.web as readonly number[];
+
   const totalesStock = useMemo(() => {
     const totales: Record<string, number> = {};
+    const tiendasParaStock = tiendas.filter(t => !ocultarIds.includes(t.id) && !webIds.includes(t.id));
     for (const talla of tallas) {
-      totales[talla] = tiendas.reduce((sum, t) => sum + (t.tallas[talla]?.stock || 0), 0);
+      totales[talla] = tiendasParaStock.reduce((sum, t) => sum + (t.tallas[talla]?.stock || 0), 0);
     }
     return totales;
   }, [tiendas, tallas]);
 
   const totalesVentas = useMemo(() => {
     const totales: Record<string, number> = {};
+    const tiendasParaVentas = tiendas.filter(t => !ocultarIds.includes(t.id));
     for (const talla of tallas) {
-      totales[talla] = tiendas.reduce((sum, t) => sum + (t.tallas[talla]?.ventas || 0), 0);
+      totales[talla] = tiendasParaVentas.reduce((sum, t) => sum + (t.tallas[talla]?.ventas || 0), 0);
     }
     return totales;
   }, [tiendas, tallas]);
@@ -63,7 +75,8 @@ export function UnifiedTallaTable({
   const esCeldaRoja = (tiendaId: number, talla: string, stock: number): boolean => {
     const centralIds = DEPOSITOS_CONFIG.central as readonly number[];
     const outletIds = DEPOSITOS_CONFIG.outlet as readonly number[];
-    if (centralIds.includes(tiendaId) || outletIds.includes(tiendaId)) {
+    // No marcar en rojo: central, outlet, web, ocultar
+    if (centralIds.includes(tiendaId) || outletIds.includes(tiendaId) || webIds.includes(tiendaId) || ocultarIds.includes(tiendaId)) {
       return false;
     }
     return stock === 0 && (stockCentralPorTalla[talla] || 0) > 0;
@@ -107,22 +120,26 @@ export function UnifiedTallaTable({
     );
   };
 
-  const renderTiendaRow = (tienda: TiendaData, isCentral: boolean = false, isOutlet: boolean = false) => {
+  const renderTiendaRow = (tienda: TiendaData, isCentral: boolean = false, isOutlet: boolean = false, isWeb: boolean = false) => {
     const bgClass = isCentral
       ? 'bg-yellow-50/50 dark:bg-yellow-900/10'
       : isOutlet
         ? 'bg-purple-50/30 dark:bg-purple-900/5'
-        : 'bg-white dark:bg-gray-900';
+        : isWeb
+          ? 'bg-cyan-50/30 dark:bg-cyan-900/5'
+          : 'bg-white dark:bg-gray-900';
 
     return (
       <tr key={tienda.id} className={`border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50`}>
         <td className={`sticky left-0 z-10 ${bgClass} px-2 py-1.5 text-xs font-medium text-gray-900 dark:text-white whitespace-nowrap`}>
           {tienda.nombre}
         </td>
-        {/* Stock columns */}
-        {tallas.map(talla => renderStockCell(tienda.id, talla, tienda.tallas[talla]?.stock || 0))}
+        {/* Stock columns - ocultar para tiendas web */}
+        {tallas.map(talla => isWeb ? (
+          <td key={`stock-${talla}`} className="px-1.5 py-1 text-center text-xs text-gray-300 dark:text-gray-600">-</td>
+        ) : renderStockCell(tienda.id, talla, tienda.tallas[talla]?.stock || 0))}
         <td className="px-2 py-1 text-center text-xs font-bold bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 border-r-2 border-blue-200 dark:border-blue-800">
-          {tienda.totalStock || '-'}
+          {isWeb ? '-' : (tienda.totalStock || '-')}
         </td>
         {/* Ventas columns */}
         {tallas.map(talla => renderVentasCell(talla, tienda.tallas[talla]?.ventas || 0))}
@@ -223,6 +240,18 @@ export function UnifiedTallaTable({
                   </td>
                 </tr>
                 {outlets.map(tienda => renderTiendaRow(tienda, false, true))}
+              </>
+            )}
+
+            {/* Tiendas Web (solo ventas, sin stock) */}
+            {web.length > 0 && (
+              <>
+                <tr className="bg-cyan-100/50 dark:bg-cyan-900/20">
+                  <td colSpan={tallas.length * 2 + 3} className="px-2 py-1 text-[10px] font-bold text-cyan-600 dark:text-cyan-400 uppercase">
+                    Web (solo ventas)
+                  </td>
+                </tr>
+                {web.map(tienda => renderTiendaRow(tienda, false, false, true))}
               </>
             )}
           </tbody>

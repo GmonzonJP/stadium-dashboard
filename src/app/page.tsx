@@ -297,7 +297,7 @@ export default function Dashboard() {
           {/* Pinned Tables Area - Aparece debajo de las tarjetas KPI, antes de Análisis de Productos */}
           <AnimatePresence>
             {pinnedTables.length > 0 && (
-              <div className="space-y-6">
+              <div className="flex flex-wrap gap-4">
                 {pinnedTables.map(table => (
                   <PinnedMetricTable
                     key={table.id}

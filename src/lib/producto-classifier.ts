@@ -140,14 +140,14 @@ export function clasificarEstadoStock(
 }
 
 /**
- * Nueva clasificación de desempeño de venta usando semanas (Dimensión A)
+ * Clasificación de desempeño de venta (Dimensión A)
  *
- * Lógica:
- * - Si hay menos de 3 semanas de data → SIN_DATOS (no hay suficiente historial)
- * - FAST_MOVER: WeeksToClear < WeeksRemaining × 0.5 (venderá en menos de la mitad del tiempo)
- * - OK: WeeksToClear ≤ WeeksRemaining (dentro del plazo)
- * - SLOW_MOVER: WeeksToClear > WeeksRemaining pero < WeeksRemaining × 2 (recuperable con acción)
- * - CLAVO: WeeksToClear >= WeeksRemaining × 2 (no alcanzará sell-out sin liquidación)
+ * Lógica simplificada basada en días de stock (más intuitiva para usuarios):
+ * - FAST_MOVER: Venderá en < 60 días (2 meses)
+ * - OK: Venderá en 60-120 días (2-4 meses)
+ * - SLOW_MOVER: Venderá en 120-180 días (4-6 meses)
+ * - CLAVO: Venderá en > 180 días (más de 6 meses) o sin ventas
+ * - SIN_DATOS: Menos de 3 semanas de historial
  */
 export function clasificarDesempenoVenta(
   stockActual: number,
@@ -161,7 +161,6 @@ export function clasificarDesempenoVenta(
   }
 
   const semanasTranscurridas = diasTranscurridos / 7;
-  const semanaCiclo = getSemanaCiclo(marca);
 
   // Si no hay suficientes semanas de data, no clasificar
   if (semanasTranscurridas < UMBRALES.semanasMinimosData) {
@@ -173,38 +172,25 @@ export function clasificarDesempenoVenta(
     return 'CLAVO';
   }
 
-  const ventasPromedioSemanal = calcularVentasPromedioSemanal(unidadesVendidas, diasTranscurridos);
-  const weeksToClear = calcularWeeksToClear(stockActual, ventasPromedioSemanal);
-  const weeksRemaining = calcularWeeksRemaining(diasTranscurridos, semanaCiclo);
+  // Calcular días para vender el stock (más intuitivo que semanas)
+  const paresPorDia = unidadesVendidas / diasTranscurridos;
+  const diasParaVenderStock = paresPorDia > 0 ? stockActual / paresPorDia : null;
 
-  // Si no se puede calcular weeksToClear, sin datos
-  if (weeksToClear === null) {
+  if (diasParaVenderStock === null) {
     return 'SIN_DATOS';
   }
 
-  // Si ya pasó el ciclo completo (weeksRemaining = 0)
-  if (weeksRemaining <= 0) {
-    // Cualquier stock restante es problemático
-    return weeksToClear > UMBRALES.factorRecuperable ? 'CLAVO' : 'SLOW_MOVER';
+  // Clasificación basada en días de stock (umbrales absolutos)
+  // Estos valores son más intuitivos para el usuario
+  if (diasParaVenderStock < 60) {
+    return 'FAST_MOVER'; // Venderá en menos de 2 meses
+  } else if (diasParaVenderStock < 120) {
+    return 'OK'; // Venderá en 2-4 meses
+  } else if (diasParaVenderStock < 180) {
+    return 'SLOW_MOVER'; // Venderá en 4-6 meses
+  } else {
+    return 'CLAVO'; // Más de 6 meses para vender
   }
-
-  // CLAVO: No alcanzará sell-out ni con el doble de tiempo
-  if (weeksToClear >= weeksRemaining * UMBRALES.factorRecuperable) {
-    return 'CLAVO';
-  }
-
-  // SLOW_MOVER: Excede el plazo pero recuperable con promoción
-  if (weeksToClear > weeksRemaining) {
-    return 'SLOW_MOVER';
-  }
-
-  // FAST_MOVER: Venderá en menos de la mitad del tiempo restante
-  if (weeksToClear < weeksRemaining * 0.5) {
-    return 'FAST_MOVER';
-  }
-
-  // OK: Dentro del ritmo esperado
-  return 'OK';
 }
 
 /**

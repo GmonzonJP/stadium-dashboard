@@ -34,46 +34,54 @@ function calcularVariacion(actual: number, anterior: number): number | null {
     return ((actual - anterior) / anterior) * 100;
 }
 
-// Componente para mostrar comparativo con color
-function ComparativoCell({ actual, anterior, isMoney = false }: { actual: number; anterior?: number; isMoney?: boolean }) {
-    if (anterior === undefined || anterior === null) {
-        return (
-            <span className={cn("tabular-nums text-base font-bold", isMoney ? "text-emerald-400" : "text-slate-300")}>
-                {isMoney ? '$' : ''}{actual?.toLocaleString()}
-            </span>
-        );
-    }
+// Celda con valor y variación debajo entre paréntesis
+function ValueWithVariation({
+    value,
+    anterior,
+    isMoney = false,
+    colorPositive = "text-emerald-400",
+    colorNegative = "text-red-400",
+    colorNeutral = "text-slate-300"
+}: {
+    value: number;
+    anterior?: number;
+    isMoney?: boolean;
+    colorPositive?: string;
+    colorNegative?: string;
+    colorNeutral?: string;
+}) {
+    const hasAnterior = anterior !== undefined && anterior !== null && anterior !== 0;
+    const variacion = hasAnterior ? calcularVariacion(value, anterior) : null;
+    const esMayor = hasAnterior && value > anterior;
+    const esMenor = hasAnterior && value < anterior;
 
-    const variacion = calcularVariacion(actual, anterior);
-    const esPositivo = actual >= anterior;
-    const esMayor = actual > anterior;
-    const esMenor = actual < anterior;
+    const valueColor = hasAnterior
+        ? (esMayor ? colorPositive : esMenor ? colorNegative : colorNeutral)
+        : colorNeutral;
 
     return (
         <div className="flex flex-col items-end">
-            <div className="flex items-center gap-1.5">
+            <span className={cn("tabular-nums font-semibold text-sm", valueColor)}>
+                {isMoney ? '$' : ''}{Math.round(value)?.toLocaleString()}
+            </span>
+            {hasAnterior && variacion !== null && (
                 <span className={cn(
-                    "tabular-nums font-bold text-base",
-                    esMayor ? "text-emerald-400" : esMenor ? "text-red-400" : "text-slate-300"
+                    "text-[10px] tabular-nums",
+                    esMayor ? "text-emerald-500" : esMenor ? "text-red-500" : "text-slate-500"
                 )}>
-                    {isMoney ? '$' : ''}{actual?.toLocaleString()}
+                    ({esMayor ? '+' : ''}{variacion.toFixed(0)}%)
                 </span>
-                {esMayor && <TrendingUp size={14} className="text-emerald-400" />}
-                {esMenor && <TrendingDown size={14} className="text-red-400" />}
-                {!esMayor && !esMenor && <Minus size={14} className="text-slate-500" />}
-            </div>
-            <div className="flex items-center gap-1 text-xs text-slate-500">
-                <span>vs {isMoney ? '$' : ''}{anterior?.toLocaleString()}</span>
-                {variacion !== null && (
-                    <span className={cn(
-                        "font-medium",
-                        esPositivo ? "text-emerald-500" : "text-red-500"
-                    )}>
-                        ({esPositivo ? '+' : ''}{variacion.toFixed(1)}%)
-                    </span>
-                )}
-            </div>
+            )}
         </div>
+    );
+}
+
+// Celda simple para valores anteriores (sin variación)
+function ValueCell({ value, isMoney = false, color = "text-slate-500" }: { value: number; isMoney?: boolean; color?: string }) {
+    return (
+        <span className={cn("tabular-nums text-sm", color)}>
+            {isMoney ? '$' : ''}{Math.round(value)?.toLocaleString()}
+        </span>
     );
 }
 
@@ -197,7 +205,7 @@ export function PinnedMetricTable({ id, title, groupBy, groupByLabel, onClose, s
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             className={cn(
-                "bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden shadow-xl mb-6 last:mb-0",
+                "bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden shadow-xl flex-1 min-w-[400px] max-w-[calc(50%-0.5rem)]",
                 showHighlight && "apple-highlight"
             )}
         >
@@ -221,7 +229,7 @@ export function PinnedMetricTable({ id, title, groupBy, groupByLabel, onClose, s
                 </button>
             </div>
 
-            <div className="overflow-x-auto max-h-[400px] custom-scrollbar">
+            <div className="overflow-x-auto max-h-[1200px] custom-scrollbar">
                 {isLoading ? (
                     <div className="flex items-center justify-center p-12">
                         <Loader2 className="animate-spin text-blue-500" size={30} />
@@ -232,150 +240,134 @@ export function PinnedMetricTable({ id, title, groupBy, groupByLabel, onClose, s
                     <table className="w-full text-left text-sm">
                         <thead className="bg-slate-800/30 sticky top-0 z-10 backdrop-blur-sm">
                             <tr>
-                                <th className="p-3 font-semibold text-slate-400 uppercase text-xs">
+                                <th className="p-2 font-semibold text-slate-400 uppercase text-[10px]">
                                     <button
                                         onClick={() => handleSort('label')}
-                                        className="flex items-center space-x-2 hover:text-white transition-colors"
+                                        className="flex items-center space-x-1 hover:text-white transition-colors"
                                     >
                                         <span>Etiqueta</span>
                                         {sortColumn === 'label' ? (
-                                            sortDirection === 'asc' ? <ArrowUp size={12} className="text-blue-400" /> : <ArrowDown size={12} className="text-blue-400" />
+                                            sortDirection === 'asc' ? <ArrowUp size={10} className="text-blue-400" /> : <ArrowDown size={10} className="text-blue-400" />
                                         ) : (
-                                            <ArrowUpDown size={12} className="opacity-50" />
+                                            <ArrowUpDown size={10} className="opacity-50" />
                                         )}
                                     </button>
                                 </th>
-                                <th className="p-3 font-semibold text-slate-400 uppercase text-xs text-right">
+                                <th className="p-2 font-semibold text-slate-400 uppercase text-[10px] text-right">
                                     <button
                                         onClick={() => handleSort('units')}
-                                        className="flex items-center justify-end space-x-2 hover:text-white transition-colors w-full"
+                                        className="flex items-center justify-end space-x-1 hover:text-white transition-colors w-full"
                                     >
-                                        <span>{isStockMetric ? 'Stock' : 'Unidades'}</span>
+                                        <span>{isStockMetric ? 'Stock' : 'Uds'}</span>
                                         {sortColumn === 'units' ? (
-                                            sortDirection === 'asc' ? <ArrowUp size={12} className="text-blue-400" /> : <ArrowDown size={12} className="text-blue-400" />
+                                            sortDirection === 'asc' ? <ArrowUp size={10} className="text-blue-400" /> : <ArrowDown size={10} className="text-blue-400" />
                                         ) : (
-                                            <ArrowUpDown size={12} className="opacity-50" />
+                                            <ArrowUpDown size={10} className="opacity-50" />
                                         )}
                                     </button>
                                 </th>
+                                {hasAnyComparison && !isStockMetric && (
+                                    <th className="p-2 font-semibold text-slate-500 uppercase text-[10px] text-right">Ant</th>
+                                )}
                                 {!isStockMetric && (
                                     <>
-                                        <th className="p-3 font-semibold text-slate-400 uppercase text-xs text-right">
+                                        <th className="p-2 font-semibold text-slate-400 uppercase text-[10px] text-right">
                                             <button
                                                 onClick={() => handleSort('sales')}
-                                                className="flex items-center justify-end space-x-2 hover:text-white transition-colors w-full"
+                                                className="flex items-center justify-end space-x-1 hover:text-white transition-colors w-full"
                                             >
-                                                <span>Venta ($)</span>
+                                                <span>Venta</span>
                                                 {sortColumn === 'sales' ? (
-                                                    sortDirection === 'asc' ? <ArrowUp size={12} className="text-blue-400" /> : <ArrowDown size={12} className="text-blue-400" />
+                                                    sortDirection === 'asc' ? <ArrowUp size={10} className="text-blue-400" /> : <ArrowDown size={10} className="text-blue-400" />
                                                 ) : (
-                                                    <ArrowUpDown size={12} className="opacity-50" />
+                                                    <ArrowUpDown size={10} className="opacity-50" />
                                                 )}
                                             </button>
                                         </th>
-                                        <th className="p-3 font-semibold text-slate-400 uppercase text-xs text-right">
+                                        {hasAnyComparison && (
+                                            <th className="p-2 font-semibold text-slate-500 uppercase text-[10px] text-right">Ant</th>
+                                        )}
+                                        <th className="p-2 font-semibold text-slate-400 uppercase text-[10px] text-right">
                                             <button
                                                 onClick={() => handleSort('utility')}
-                                                className="flex items-center justify-end space-x-2 hover:text-white transition-colors w-full"
+                                                className="flex items-center justify-end space-x-1 hover:text-white transition-colors w-full"
                                             >
-                                                <span>Utilidad</span>
+                                                <span>Util</span>
                                                 {sortColumn === 'utility' ? (
-                                                    sortDirection === 'asc' ? <ArrowUp size={12} className="text-blue-400" /> : <ArrowDown size={12} className="text-blue-400" />
+                                                    sortDirection === 'asc' ? <ArrowUp size={10} className="text-blue-400" /> : <ArrowDown size={10} className="text-blue-400" />
                                                 ) : (
-                                                    <ArrowUpDown size={12} className="opacity-50" />
+                                                    <ArrowUpDown size={10} className="opacity-50" />
                                                 )}
                                             </button>
                                         </th>
                                     </>
                                 )}
-                                <th className="p-3 font-semibold text-slate-400 uppercase text-xs text-right">
-                                    <button
-                                        onClick={() => handleSort('percent')}
-                                        className="flex items-center justify-end space-x-2 hover:text-white transition-colors w-full"
-                                    >
-                                        <span>% Total</span>
-                                        {sortColumn === 'percent' ? (
-                                            sortDirection === 'asc' ? <ArrowUp size={12} className="text-blue-400" /> : <ArrowDown size={12} className="text-blue-400" />
-                                        ) : (
-                                            <ArrowUpDown size={12} className="opacity-50" />
-                                        )}
-                                    </button>
-                                </th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-800/50">
-                            {sortedData.map((item, idx) => {
-                                const percent = isStockMetric
-                                    ? (totalUnits > 0 ? (item.units / totalUnits) * 100 : 0)
-                                    : (totalSales > 0 ? (item.sales / totalSales) * 100 : 0);
-
-                                const hasComparison = showComparison && (item.unitsAnterior !== undefined || item.salesAnterior !== undefined);
-
-                                return (
-                                    <tr key={idx} className="hover:bg-slate-800/20 transition-colors">
-                                        <td className="p-3 text-white font-medium truncate max-w-[200px]">{item.label || 'N/A'}</td>
-                                        <td className="p-3 text-right">
-                                            {isStockMetric ? (
-                                                <span className="text-cyan-400 tabular-nums font-bold text-base">{item.units?.toLocaleString()}</span>
-                                            ) : hasComparison ? (
-                                                <ComparativoCell actual={item.units} anterior={item.unitsAnterior} />
-                                            ) : (
-                                                <span className="text-slate-300 tabular-nums font-bold text-base">{item.units?.toLocaleString()}</span>
-                                            )}
-                                        </td>
-                                        {!isStockMetric && (
-                                            <>
-                                                <td className="p-3 text-right">
-                                                    {hasComparison ? (
-                                                        <ComparativoCell actual={item.sales} anterior={item.salesAnterior} isMoney />
-                                                    ) : (
-                                                        <span className="text-emerald-400 tabular-nums font-bold text-base">${item.sales?.toLocaleString()}</span>
-                                                    )}
-                                                </td>
-                                                <td className="p-3 text-right tabular-nums">
-                                                    <span className={item.utility >= 0 ? "text-emerald-500" : "text-red-500"}>
-                                                        {item.utility}%
-                                                    </span>
-                                                </td>
-                                            </>
+                            {sortedData.map((item, idx) => (
+                                <tr key={idx} className="hover:bg-slate-800/20 transition-colors">
+                                    <td className="p-2 text-white font-medium truncate max-w-[140px] text-sm">{item.label || 'N/A'}</td>
+                                    <td className="p-2 text-right">
+                                        {isStockMetric ? (
+                                            <ValueCell value={item.units} color="text-cyan-400" />
+                                        ) : (
+                                            <ValueWithVariation value={item.units} anterior={item.unitsAnterior} />
                                         )}
-                                        <td className="p-3 text-right text-slate-400 tabular-nums">
-                                            <div className="flex items-center justify-end gap-2">
-                                                <span className="text-xs">{percent.toFixed(1)}%</span>
-                                                <div className="w-12 h-1 bg-slate-800 rounded-full overflow-hidden">
-                                                    <div className={`h-full ${isStockMetric ? 'bg-cyan-500' : 'bg-blue-500'}`} style={{ width: `${Math.min(percent, 100)}%` }}></div>
-                                                </div>
-                                            </div>
+                                    </td>
+                                    {hasAnyComparison && !isStockMetric && (
+                                        <td className="p-2 text-right">
+                                            <ValueCell value={item.unitsAnterior || 0} />
                                         </td>
-                                    </tr>
-                                );
-                            })}
+                                    )}
+                                    {!isStockMetric && (
+                                        <>
+                                            <td className="p-2 text-right">
+                                                <ValueWithVariation value={item.sales} anterior={item.salesAnterior} isMoney />
+                                            </td>
+                                            {hasAnyComparison && (
+                                                <td className="p-2 text-right">
+                                                    <ValueCell value={item.salesAnterior || 0} isMoney />
+                                                </td>
+                                            )}
+                                            <td className="p-2 text-right tabular-nums text-sm">
+                                                <span className={item.utility >= 0 ? "text-emerald-500" : "text-red-500"}>
+                                                    {Math.round(item.utility)}%
+                                                </span>
+                                            </td>
+                                        </>
+                                    )}
+                                </tr>
+                            ))}
                         </tbody>
                         <tfoot className="bg-slate-800/20 font-bold border-t border-slate-800 sticky bottom-0">
                             <tr>
-                                <td className="p-3 text-slate-400">TOTAL</td>
-                                <td className="p-3 text-right">
+                                <td className="p-2 text-slate-400 text-sm">TOTAL</td>
+                                <td className="p-2 text-right">
                                     {isStockMetric ? (
-                                        <span className="text-cyan-400 text-base font-bold">{totalUnits.toLocaleString()}</span>
-                                    ) : hasAnyComparison ? (
-                                        <ComparativoCell actual={totalUnits} anterior={totalUnitsAnterior} />
+                                        <span className="tabular-nums font-bold text-sm text-cyan-400">{Math.round(totalUnits).toLocaleString()}</span>
                                     ) : (
-                                        <span className="text-white text-base font-bold">{totalUnits.toLocaleString()}</span>
+                                        <ValueWithVariation value={totalUnits} anterior={totalUnitsAnterior} colorNeutral="text-white" />
                                     )}
                                 </td>
+                                {hasAnyComparison && !isStockMetric && (
+                                    <td className="p-2 text-right">
+                                        <ValueCell value={totalUnitsAnterior} />
+                                    </td>
+                                )}
                                 {!isStockMetric && (
                                     <>
-                                        <td className="p-3 text-right">
-                                            {hasAnyComparison ? (
-                                                <ComparativoCell actual={totalSales} anterior={totalSalesAnterior} isMoney />
-                                            ) : (
-                                                <span className="text-emerald-500 text-base font-bold">${totalSales.toLocaleString()}</span>
-                                            )}
+                                        <td className="p-2 text-right">
+                                            <ValueWithVariation value={totalSales} anterior={totalSalesAnterior} isMoney />
                                         </td>
-                                        <td className="p-3"></td>
+                                        {hasAnyComparison && (
+                                            <td className="p-2 text-right">
+                                                <ValueCell value={totalSalesAnterior} isMoney />
+                                            </td>
+                                        )}
+                                        <td className="p-2"></td>
                                     </>
                                 )}
-                                <td className="p-3 text-right text-slate-500">100%</td>
                             </tr>
                         </tfoot>
                     </table>
