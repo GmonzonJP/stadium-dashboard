@@ -49,11 +49,68 @@ export async function POST(req: NextRequest) {
         fechaInicioClasificacion.setDate(fechaInicioClasificacion.getDate() - VENTANA_CLASIFICACION_DIAS);
         const fechaInicioClasificacionStr = fechaInicioClasificacion.toISOString().split('T')[0];
 
-        // Query principal para análisis de productos con datos para semáforo
-        // IMPORTANTE: Usamos Articulos.Base para obtener el código base correcto
-        // NO usamos SUBSTRING porque los códigos base pueden tener longitudes variables
+        // Query optimizado usando CTEs en lugar de subconsultas correlacionadas
+        // Esto precalcula todas las métricas de una vez en lugar de por cada fila
         const analysisSQL = `
-            SELECT 
+            WITH
+            -- CTE 1: Ventas en ventana de N días (para semáforo)
+            VentasVentana AS (
+                SELECT
+                    BaseCol,
+                    SUM(Cantidad) as unidades_ventana
+                FROM Transacciones
+                WHERE Fecha >= '${fechaInicioVentanaStr}'
+                AND Cantidad > 0
+                GROUP BY BaseCol
+            ),
+            -- CTE 2: Ventas en últimos 180 días (fallback)
+            Ventas180 AS (
+                SELECT
+                    BaseCol,
+                    SUM(Cantidad) as unidades_180dias
+                FROM Transacciones
+                WHERE Fecha >= '${fechaInicioClasificacionStr}'
+                AND Cantidad > 0
+                GROUP BY BaseCol
+            ),
+            -- CTE 3: Última compra por producto (usando Articulos.Base)
+            UltimaCompraBase AS (
+                SELECT
+                    A.Base as BaseCol,
+                    MAX(UC.UltimoCosto) as ultimoCosto,
+                    MAX(UC.FechaUltimaCompra) as FechaUltimaCompra,
+                    SUM(UC.CantidadUltimaCompra) as CantidadUltimaCompra
+                FROM UltimaCompra UC
+                INNER JOIN Articulos A ON A.IdArticulo = UC.BaseArticulo
+                WHERE UC.UltimoCosto IS NOT NULL AND UC.UltimoCosto > 0
+                GROUP BY A.Base
+            ),
+            -- CTE 4: Ventas desde última compra (JOIN con fechas precalculadas)
+            VentasDesdeCompra AS (
+                SELECT
+                    T.BaseCol,
+                    SUM(T.Cantidad) as unidades_desde_compra
+                FROM Transacciones T
+                INNER JOIN UltimaCompraBase UCB ON UCB.BaseCol = T.BaseCol
+                WHERE T.Fecha >= UCB.FechaUltimaCompra
+                AND T.Cantidad > 0
+                GROUP BY T.BaseCol
+            ),
+            -- CTE 5: Descripciones de artículos
+            ArticulosBase AS (
+                SELECT Base, MAX(DescripcionCorta) as DescripcionCorta
+                FROM Articulos
+                GROUP BY Base
+            ),
+            -- CTE 6: Precios de lista
+            PreciosLista AS (
+                SELECT
+                    baseCol as BaseCol,
+                    MAX(Precio) as Precio
+                FROM ArticuloPrecio
+                GROUP BY baseCol
+            )
+            SELECT
                 T.BaseCol,
                 MAX(T.DescripcionMarca) as DescripcionMarca,
                 MAX(T.DescripcionArticulo) as Descripcion,
@@ -64,9 +121,9 @@ export async function POST(req: NextRequest) {
                 SUM(T.Cantidad) as unidades_vendidas,
                 -- Venta Total ($) (período filtrado)
                 CAST(SUM(T.Precio) as decimal(18,2)) as venta_total,
-                -- Precio Promedio (ASP) = venta_total / unidades (calculado en SQL para precisión)
-                CASE 
-                    WHEN SUM(T.Cantidad) > 0 
+                -- Precio Promedio (ASP)
+                CASE
+                    WHEN SUM(T.Cantidad) > 0
                     THEN CAST(SUM(T.Precio) / SUM(T.Cantidad) as decimal(18,2))
                     ELSE NULL
                 END as precio_promedio_asp,
@@ -78,64 +135,17 @@ export async function POST(req: NextRequest) {
                 MAX(UC.FechaUltimaCompra) as ultima_compra_fecha,
                 -- Cantidad última compra
                 MAX(UC.CantidadUltimaCompra) as cantidad_ultima_compra,
-                -- Unidades vendidas en ventana de N días (para semáforo)
-                (
-                    SELECT ISNULL(SUM(TV.Cantidad), 0)
-                    FROM Transacciones TV
-                    WHERE TV.BaseCol = T.BaseCol
-                    AND TV.Fecha >= '${fechaInicioVentanaStr}'
-                    AND TV.Cantidad > 0
-                ) as unidades_ventana,
-                -- Unidades vendidas en últimos 180 días (fallback)
-                (
-                    SELECT ISNULL(SUM(TV.Cantidad), 0)
-                    FROM Transacciones TV
-                    WHERE TV.BaseCol = T.BaseCol
-                    AND TV.Fecha >= '${fechaInicioClasificacionStr}'
-                    AND TV.Cantidad > 0
-                ) as unidades_180dias,
-                -- Unidades vendidas desde última compra (para clasificación)
-                (
-                    SELECT ISNULL(SUM(TV.Cantidad), 0)
-                    FROM Transacciones TV
-                    WHERE TV.BaseCol = T.BaseCol
-                    AND TV.Fecha >= ISNULL(
-                        (SELECT MAX(FUC) FROM (
-                            SELECT MAX(UC2.FechaUltimaCompra) as FUC
-                            FROM UltimaCompra UC2
-                            INNER JOIN Articulos A2 ON A2.IdArticulo = UC2.BaseArticulo
-                            WHERE A2.Base = T.BaseCol
-                        ) SubUC),
-                        '${fechaInicioClasificacionStr}'
-                    )
-                    AND TV.Cantidad > 0
-                ) as unidades_desde_compra
+                -- Métricas precalculadas desde CTEs (mucho más rápido)
+                ISNULL(MAX(VV.unidades_ventana), 0) as unidades_ventana,
+                ISNULL(MAX(V180.unidades_180dias), 0) as unidades_180dias,
+                ISNULL(MAX(VDC.unidades_desde_compra), ISNULL(MAX(V180.unidades_180dias), 0)) as unidades_desde_compra
             FROM Transacciones T
-            LEFT JOIN (
-                SELECT Base, MAX(DescripcionCorta) as DescripcionCorta
-                FROM Articulos
-                GROUP BY Base
-            ) AR ON AR.Base = T.BaseCol
-            LEFT JOIN (
-                -- UltimaCompra: JOIN con Articulos para obtener Base correcto
-                SELECT 
-                    A.Base as BaseCol, 
-                    MAX(UC.UltimoCosto) as ultimoCosto,
-                    MAX(UC.FechaUltimaCompra) as FechaUltimaCompra,
-                    SUM(UC.CantidadUltimaCompra) as CantidadUltimaCompra
-                FROM UltimaCompra UC
-                INNER JOIN Articulos A ON A.IdArticulo = UC.BaseArticulo
-                WHERE UC.UltimoCosto IS NOT NULL AND UC.UltimoCosto > 0
-                GROUP BY A.Base
-            ) UC ON UC.BaseCol = T.BaseCol
-            LEFT JOIN (
-                -- ArticuloPrecio: baseCol ya es el código base
-                SELECT 
-                    baseCol as BaseCol,
-                    MAX(Precio) as Precio
-                FROM ArticuloPrecio
-                GROUP BY baseCol
-            ) AP ON AP.BaseCol = T.BaseCol
+            LEFT JOIN ArticulosBase AR ON AR.Base = T.BaseCol
+            LEFT JOIN UltimaCompraBase UC ON UC.BaseCol = T.BaseCol
+            LEFT JOIN PreciosLista AP ON AP.BaseCol = T.BaseCol
+            LEFT JOIN VentasVentana VV ON VV.BaseCol = T.BaseCol
+            LEFT JOIN Ventas180 V180 ON V180.BaseCol = T.BaseCol
+            LEFT JOIN VentasDesdeCompra VDC ON VDC.BaseCol = T.BaseCol
             {WHERE}
             GROUP BY T.BaseCol
             HAVING SUM(T.Cantidad) > 0
@@ -143,9 +153,8 @@ export async function POST(req: NextRequest) {
         `;
 
         // Query para stock desde MovStockTotalResumen (fuente de verdad)
-        // IMPORTANTE: JOIN con Articulos para obtener Base correcto (NO usar SUBSTRING)
         const stockSQL = `
-            SELECT 
+            SELECT
                 A.Base as BaseCol,
                 SUM(MS.TotalStock) as stock_on_hand,
                 SUM(CASE WHEN MS.Pendientes > 0 THEN MS.Pendientes ELSE 0 END) as stock_pendiente,
@@ -161,12 +170,11 @@ export async function POST(req: NextRequest) {
         });
 
         // Aplicar filtros de marca al stock si existen
-        // Usamos Articulos.IdMarca para filtrar (NO SUBSTRING)
         let stockQuery = stockSQL;
         if (filters.brands?.length) {
             const brandIds = filters.brands.map((b: number) => Number(b)).join(',');
             stockQuery = stockSQL.replace(
-                'WHERE MS.TotalStock', 
+                'WHERE MS.TotalStock',
                 `WHERE A.IdMarca IN (${brandIds}) AND (MS.TotalStock`
             ).replace('GROUP BY A.Base', ') GROUP BY A.Base');
         }
@@ -226,7 +234,7 @@ export async function POST(req: NextRequest) {
             const sellThrough = calculateSellThrough(unidades, stock.stock_total);
 
             // Calcular semáforo de reposición
-            const semaphore = ultimaCompraFecha 
+            const semaphore = ultimaCompraFecha
                 ? calculateSemaphoreFromData(
                     stock.stock_total,
                     unidadesVentana,
@@ -312,9 +320,9 @@ export async function POST(req: NextRequest) {
 
     } catch (error) {
         console.error('API Error in products analysis:', error);
-        return NextResponse.json({ 
-            error: 'Internal Server Error', 
-            details: error instanceof Error ? error.message : String(error) 
+        return NextResponse.json({
+            error: 'Internal Server Error',
+            details: error instanceof Error ? error.message : String(error)
         }, { status: 500 });
     }
 }
