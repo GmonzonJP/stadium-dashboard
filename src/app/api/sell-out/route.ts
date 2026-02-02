@@ -24,6 +24,8 @@ export async function POST(request: NextRequest) {
     // Query principal para obtener productos con métricas
     // IMPORTANTE: UltimaCompra.BaseArticulo es IdArticulo (con talle),
     // necesitamos JOIN con Articulos para obtener el Base correcto
+    // NOTA: Excluimos tiendas web (701, 702, 704) del cálculo de sellout
+    const webStoreIds = DEPOSITOS_CONFIG.web.join(',');
     const baseQuery = `
       WITH ProductoVentas AS (
         SELECT
@@ -38,6 +40,7 @@ export async function POST(request: NextRequest) {
           MAX(T.PRECIO / NULLIF(T.Cantidad, 0)) as MaxPrecioUnitario
         FROM Transacciones T
         WHERE T.Cantidad > 0
+          AND T.IdSucursal NOT IN (${webStoreIds})
         {WHERE_CLAUSE}
         GROUP BY T.BaseCol, T.IdMarca
       ),
@@ -71,6 +74,7 @@ export async function POST(request: NextRequest) {
       ),
       PrimeraVentaDesdeCompra AS (
         -- JOIN con Articulos para obtener Base correcto
+        -- Excluye ventas web para cálculo de sellout
         SELECT
           T.BaseCol,
           MIN(T.Fecha) as PrimeraVentaDesdeUltimaCompra
@@ -83,10 +87,12 @@ export async function POST(request: NextRequest) {
         ) UCI ON T.BaseCol = UCI.BaseCol
         WHERE T.Fecha >= UCI.FechaUltimaCompra
           AND T.Cantidad > 0
+          AND T.IdSucursal NOT IN (${webStoreIds})
         GROUP BY T.BaseCol
       ),
       VentasDesdeCompra AS (
         -- Unidades vendidas desde la última compra (para clasificación de estacionales)
+        -- Excluye ventas web
         SELECT
           T.BaseCol,
           SUM(T.Cantidad) as UnidadesDesdeCompra
@@ -99,16 +105,19 @@ export async function POST(request: NextRequest) {
         ) UCI ON T.BaseCol = UCI.BaseCol
         WHERE T.Fecha >= UCI.FechaUltimaCompra
           AND T.Cantidad > 0
+          AND T.IdSucursal NOT IN (${webStoreIds})
         GROUP BY T.BaseCol
       ),
       Ventas180Dias AS (
         -- Unidades vendidas en últimos 180 días (para clasificación de carryover)
+        -- Excluye ventas web
         SELECT
           T.BaseCol,
           SUM(T.Cantidad) as Unidades180Dias
         FROM Transacciones T
         WHERE T.Fecha >= DATEADD(DAY, -180, GETDATE())
           AND T.Cantidad > 0
+          AND T.IdSucursal NOT IN (${webStoreIds})
         GROUP BY T.BaseCol
       )
       ,
@@ -121,11 +130,13 @@ export async function POST(request: NextRequest) {
       ),
       PrimeraVentaGlobal AS (
         -- Primera venta del producto en toda la historia (para detectar carryover)
+        -- Excluye ventas web
         SELECT
           T.BaseCol,
           MIN(T.Fecha) as PrimeraVentaGlobal
         FROM Transacciones T
         WHERE T.Cantidad > 0
+          AND T.IdSucursal NOT IN (${webStoreIds})
         GROUP BY T.BaseCol
       )
       SELECT

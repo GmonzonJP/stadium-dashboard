@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface HistorialAnualData {
-    anio: number;
+    temporada: string;  // "Invierno 2024", "Verano 2024"
     unidadesVendidas: number;
     importeVenta: number;
     precioPromedio: number;
@@ -21,6 +21,24 @@ interface HistorialAnualProps {
     stockActual: number;
 }
 
+// Determinar la temporada actual basada en la fecha
+function getTemporadaActual(): string {
+    const now = new Date();
+    const mes = now.getMonth() + 1; // 1-12
+    const anio = now.getFullYear();
+
+    // Invierno: marzo a agosto (meses 3-8)
+    // Verano: septiembre a febrero (meses 9-12 + 1-2)
+    if (mes >= 3 && mes <= 8) {
+        return `Invierno ${anio}`;
+    } else if (mes >= 9) {
+        return `Verano ${anio}`;
+    } else {
+        // Enero y febrero pertenecen al verano del año anterior
+        return `Verano ${anio - 1}`;
+    }
+}
+
 export function HistorialAnual({
     historial,
     temporadas,
@@ -33,7 +51,7 @@ export function HistorialAnual({
         return null;
     }
 
-    const anioActual = new Date().getFullYear();
+    const temporadaActual = getTemporadaActual();
     const esProductoViejo = temporadas >= 2;
     const esCritico = temporadas >= 3;
 
@@ -126,7 +144,7 @@ export function HistorialAnual({
                                 <table className="w-full text-sm">
                                     <thead>
                                         <tr className="border-b border-slate-700">
-                                            <th className="text-left py-2 px-2 text-slate-400 font-medium">Año</th>
+                                            <th className="text-left py-2 px-2 text-slate-400 font-medium">Temporada</th>
                                             <th className="text-right py-2 px-2 text-slate-400 font-medium">Vendido</th>
                                             <th className="text-right py-2 px-2 text-slate-400 font-medium">%</th>
                                             <th className="text-right py-2 px-2 text-slate-400 font-medium">Importe</th>
@@ -136,7 +154,7 @@ export function HistorialAnual({
                                     </thead>
                                     <tbody>
                                         {historial.map((row, index) => {
-                                            const esAnioActual = row.anio === anioActual;
+                                            const esTemporadaActual = row.temporada === temporadaActual;
                                             const margenColor = row.margenPromedio !== null
                                                 ? row.margenPromedio >= 30 ? 'text-emerald-400'
                                                     : row.margenPromedio >= 15 ? 'text-yellow-400'
@@ -145,20 +163,20 @@ export function HistorialAnual({
 
                                             return (
                                                 <tr
-                                                    key={row.anio}
+                                                    key={row.temporada}
                                                     className={cn(
                                                         "border-b border-slate-800/50",
-                                                        esAnioActual && "bg-blue-500/10"
+                                                        esTemporadaActual && "bg-blue-500/10"
                                                     )}
                                                 >
                                                     <td className="py-2 px-2">
                                                         <span className={cn(
                                                             "font-medium",
-                                                            esAnioActual ? "text-blue-400" : "text-white"
+                                                            esTemporadaActual ? "text-blue-400" : "text-white"
                                                         )}>
-                                                            {row.anio}
+                                                            {row.temporada}
                                                         </span>
-                                                        {esAnioActual && (
+                                                        {esTemporadaActual && (
                                                             <span className="ml-1 text-[10px] text-blue-400">(actual)</span>
                                                         )}
                                                     </td>
@@ -212,7 +230,7 @@ export function HistorialAnual({
                                 <div className="mt-3 flex items-center gap-2 text-xs text-red-400">
                                     <TrendingDown className="w-4 h-4" />
                                     <span>
-                                        Ventas cayeron {Math.abs(tendenciaVentas).toFixed(0)}% vs año anterior
+                                        Ventas cayeron {Math.abs(tendenciaVentas).toFixed(0)}% vs temporada anterior
                                     </span>
                                 </div>
                             )}

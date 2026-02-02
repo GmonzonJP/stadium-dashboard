@@ -838,25 +838,40 @@ export async function GET(
             : null;
 
         // ============================================
-        // HISTORIAL ANUAL DEL PRODUCTO
+        // HISTORIAL POR TEMPORADA DEL PRODUCTO
         // ============================================
-        // Obtener ventas, margen y precio promedio por año
+        // Temporadas (hemisferio sur):
+        // - Invierno: marzo a agosto (meses 3-8)
+        // - Verano: septiembre a febrero (meses 9-12 + 1-2 del año siguiente)
         const historialAnualQuery = `
             SELECT
-                YEAR(T.Fecha) as anio,
+                CASE
+                    WHEN MONTH(T.Fecha) BETWEEN 3 AND 8
+                    THEN CONCAT('Invierno ', YEAR(T.Fecha))
+                    WHEN MONTH(T.Fecha) >= 9
+                    THEN CONCAT('Verano ', YEAR(T.Fecha))
+                    ELSE CONCAT('Verano ', YEAR(T.Fecha) - 1)
+                END as temporada,
                 SUM(T.Cantidad) as unidadesVendidas,
                 CAST(SUM(T.PRECIO) as decimal(18,2)) as importeVenta,
                 AVG(T.PRECIO / NULLIF(T.Cantidad, 0)) as precioPromedio,
-                MIN(T.Fecha) as primeraVentaAnio,
-                MAX(T.Fecha) as ultimaVentaAnio
+                MIN(T.Fecha) as primeraVentaTemporada,
+                MAX(T.Fecha) as ultimaVentaTemporada
             FROM Transacciones T
             WHERE T.BaseCol = @articulo
-            GROUP BY YEAR(T.Fecha)
-            ORDER BY anio DESC
+            GROUP BY
+                CASE
+                    WHEN MONTH(T.Fecha) BETWEEN 3 AND 8
+                    THEN CONCAT('Invierno ', YEAR(T.Fecha))
+                    WHEN MONTH(T.Fecha) >= 9
+                    THEN CONCAT('Verano ', YEAR(T.Fecha))
+                    ELSE CONCAT('Verano ', YEAR(T.Fecha) - 1)
+                END
+            ORDER BY MAX(T.Fecha) DESC
         `;
 
         let historialAnual: Array<{
-            anio: number;
+            temporada: string;
             unidadesVendidas: number;
             importeVenta: number;
             precioPromedio: number;
@@ -882,7 +897,7 @@ export async function GET(
                     : null;
 
                 return {
-                    anio: row.anio,
+                    temporada: row.temporada,
                     unidadesVendidas: Number(row.unidadesVendidas) || 0,
                     importeVenta: Number(row.importeVenta) || 0,
                     precioPromedio: precio,
@@ -891,15 +906,20 @@ export async function GET(
                 };
             });
 
-            console.log(`Historial anual for ${articulo}:`, historialAnual.length, 'años');
+            console.log(`Historial por temporada for ${articulo}:`, historialAnual.length, 'temporadas');
         } catch (err) {
-            console.error('Error getting historial anual:', err);
+            console.error('Error getting historial por temporada:', err);
         }
 
         // Calcular número de temporadas (años con actividad)
         const temporadas = historialAnual.length;
+        // Extraer el año de cada temporada (e.g., "Invierno 2024" -> 2024)
+        const extractYearFromTemporada = (temporada: string): number => {
+            const match = temporada.match(/\d{4}/);
+            return match ? parseInt(match[0], 10) : new Date().getFullYear();
+        };
         const primeraCompraAnio = historialAnual.length > 0
-            ? Math.min(...historialAnual.map(h => h.anio))
+            ? Math.min(...historialAnual.map(h => extractYearFromTemporada(h.temporada)))
             : null;
 
         // Detectar si es producto CARRYOVER (primera venta antes de última compra)

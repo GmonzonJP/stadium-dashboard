@@ -24,11 +24,12 @@ import { ProductDetail } from '@/components/ProductDetail';
 import { AddToPriceQueueModal } from '@/components/AddToPriceQueueModal';
 import { getProductImageUrl } from '@/lib/utils';
 
-type TabId = 'marca' | 'producto' | 'slow-movers' | 'clavos' | 'saldos';
+type TabId = 'marca' | 'producto' | 'fast-movers' | 'slow-movers' | 'clavos' | 'saldos';
 
 const TABS: { id: TabId; label: string; icon: React.ElementType }[] = [
   { id: 'marca', label: 'Por Marca', icon: BarChart2 },
   { id: 'producto', label: 'Por Producto', icon: Package },
+  { id: 'fast-movers', label: 'Fast Movers', icon: Rocket },
   { id: 'slow-movers', label: 'Slow Movers', icon: TrendingDown },
   { id: 'clavos', label: 'Clavos / Burn', icon: Flame },
   { id: 'saldos', label: 'Saldos', icon: Tag },
@@ -143,6 +144,7 @@ export default function SellOutPage() {
     fetchData();
   }, [selectedFilters]);
 
+  const fastMovers = data?.byProduct.filter(p => p.estado === 'FAST_MOVER') || [];
   const slowMovers = data?.byProduct.filter(p => p.estado === 'SLOW_MOVER') || [];
   const clavos = data?.byProduct.filter(p => p.estado === 'CLAVO') || [];
   const saldos = data?.byProduct.filter(p => p.esSaldo) || [];
@@ -290,8 +292,8 @@ export default function SellOutPage() {
                   <td className="px-4 py-3 text-center text-amber-600">{marca.cantidadSlowMovers}</td>
                   <td className="px-4 py-3 text-center text-red-600">{marca.cantidadClavos}</td>
                   <td className={`px-4 py-3 text-right font-medium ${
-                    marca.porcentajeSlowMovers > 30 ? 'text-red-600' :
-                    marca.porcentajeSlowMovers > 15 ? 'text-amber-600' : 'text-gray-600'
+                    marca.porcentajeSlowMovers > 30 ? 'text-red-600 dark:text-red-400' :
+                    marca.porcentajeSlowMovers > 15 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-600 dark:text-gray-400'
                   }`}>
                     {marca.porcentajeSlowMovers.toFixed(1)}%
                   </td>
@@ -483,14 +485,14 @@ export default function SellOutPage() {
             </h3>
             <div className="flex gap-6">
               <div>
-                <span className="text-sm text-red-600">Slow Movers:</span>
-                <span className="ml-2 font-semibold text-red-700">
+                <span className="text-sm text-red-600 dark:text-red-400">Slow Movers:</span>
+                <span className="ml-2 font-semibold text-red-700 dark:text-red-300">
                   {formatCurrency(data.resumen.valorInventarioSlowMovers)}
                 </span>
               </div>
               <div>
-                <span className="text-sm text-red-600">Clavos:</span>
-                <span className="ml-2 font-semibold text-red-700">
+                <span className="text-sm text-red-600 dark:text-red-400">Clavos:</span>
+                <span className="ml-2 font-semibold text-red-700 dark:text-red-300">
                   {formatCurrency(data.resumen.valorInventarioClavos)}
                 </span>
               </div>
@@ -503,7 +505,8 @@ export default function SellOutPage() {
           {TABS.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
-            const count = tab.id === 'slow-movers' ? slowMovers.length :
+            const count = tab.id === 'fast-movers' ? fastMovers.length :
+                         tab.id === 'slow-movers' ? slowMovers.length :
                          tab.id === 'clavos' ? clavos.length :
                          tab.id === 'saldos' ? saldos.length : null;
 
@@ -513,17 +516,18 @@ export default function SellOutPage() {
                 onClick={() => setActiveTab(tab.id)}
                 className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-colors whitespace-nowrap ${
                   isActive
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                    ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
                 }`}
               >
                 <Icon size={18} />
                 {tab.label}
                 {count !== null && count > 0 && (
                   <span className={`px-2 py-0.5 rounded-full text-xs ${
-                    tab.id === 'clavos' ? 'bg-red-100 text-red-700' :
-                    tab.id === 'saldos' ? 'bg-purple-100 text-purple-700' :
-                    'bg-amber-100 text-amber-700'
+                    tab.id === 'fast-movers' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300' :
+                    tab.id === 'clavos' ? 'bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300' :
+                    tab.id === 'saldos' ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300' :
+                    'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300'
                   }`}>
                     {count}
                   </span>
@@ -553,6 +557,7 @@ export default function SellOutPage() {
           >
             {activeTab === 'marca' && renderMarcaTab()}
             {activeTab === 'producto' && data && renderProductoTab(data.byProduct)}
+            {activeTab === 'fast-movers' && renderProductoTab(fastMovers, `Fast Movers (${fastMovers.length} productos)`)}
             {activeTab === 'slow-movers' && renderProductoTab(slowMovers, `Slow Movers (${slowMovers.length} productos)`)}
             {activeTab === 'clavos' && renderProductoTab(clavos, `Clavos / Burn (${clavos.length} productos)`)}
             {activeTab === 'saldos' && renderProductoTab(saldos, `Saldos (${saldos.length} productos)`)}
