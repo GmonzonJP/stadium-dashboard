@@ -332,15 +332,15 @@ export function ProductDetail({ productId, onClose, initialStartDate, initialEnd
                                 </div>
                             ) : (
                                 <div className="p-6">
-                                    {/* Main Grid: Image + Info + Top Ventas */}
+                                    {/* Main Grid: Image/TopTiendas + Info/Metrics */}
                                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6">
-                                        {/* Left Column: Image + Color Variants */}
+                                        {/* Left Column: Image + Color Variants + Top Tiendas */}
                                         <div className="lg:col-span-3 space-y-4">
-                                            <div className="bg-slate-50 dark:bg-slate-800 rounded-2xl p-4 flex items-center justify-center min-h-[280px]">
+                                            <div className="bg-slate-50 dark:bg-slate-800 rounded-2xl p-4 flex items-center justify-center min-h-[220px]">
                                                 <img
                                                     src={getProductImageUrl(data?.BaseCol || currentProductId)}
                                                     alt={data?.descripcionCorta || currentProductId}
-                                                    className="max-w-full max-h-[260px] object-contain"
+                                                    className="max-w-full max-h-[200px] object-contain"
                                                     onError={(e) => {
                                                         e.currentTarget.src = 'https://placehold.co/400x400/e5e7eb/9ca3af?text=Sin+Imagen';
                                                     }}
@@ -354,10 +354,46 @@ export function ProductDetail({ productId, onClose, initialStartDate, initialEnd
                                                     onSelectColor={(baseCol) => setSelectedColor(baseCol)}
                                                 />
                                             )}
+                                            {/* Top Ventas por Tienda - Ahora debajo de la foto */}
+                                            {topTiendas.length > 0 && (
+                                                <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+                                                    <div className="px-3 py-2 bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
+                                                        <h3 className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                                                            <Store className="text-blue-600 dark:text-blue-400" size={14} />
+                                                            Top Ventas por Tienda
+                                                        </h3>
+                                                    </div>
+                                                    <div className="overflow-y-auto max-h-[200px] custom-scrollbar">
+                                                        <table className="w-full text-sm">
+                                                            <thead className="bg-slate-50 dark:bg-slate-700/30 sticky top-0">
+                                                                <tr>
+                                                                    <th className="py-1.5 px-2 text-left font-semibold text-slate-600 dark:text-slate-400 text-xs">Tienda</th>
+                                                                    <th className="py-1.5 px-2 text-center font-semibold text-slate-600 dark:text-slate-400 text-xs">Un.</th>
+                                                                    <th className="py-1.5 px-2 text-right font-semibold text-slate-600 dark:text-slate-400 text-xs">$</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {topTiendas.map((s: any, idx: number) => (
+                                                                    <tr key={s.id} className="border-t border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                                                                        <td className="py-1.5 px-2 font-medium text-slate-800 dark:text-slate-200 truncate max-w-[80px] text-xs" title={s.descripcion}>
+                                                                            <span className="text-slate-400 dark:text-slate-500 mr-1">{idx + 1}.</span>
+                                                                            {s.descripcion?.replace('Stadium ', 'S').replace('STADIUM ', 'S')}
+                                                                        </td>
+                                                                        <td className="py-1.5 px-2 text-center font-bold text-sm text-slate-800 dark:text-slate-100">{s.ttlunidadesVenta || 0}</td>
+                                                                        <td className="py-1.5 px-2 text-right font-mono font-bold text-sm text-emerald-600 dark:text-emerald-400">
+                                                                            ${Number(s.ttlimporteVenta || 0).toLocaleString('es-AR', { maximumFractionDigits: 0, notation: 'compact' })}
+                                                                        </td>
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
 
-                                        {/* Center Column: Product Info + Metrics */}
-                                        <div className="lg:col-span-6 space-y-4">
+                                        {/* Right Column: Product Info + Metrics - Ahora ocupa 9 columnas */}
+                                        <div className="lg:col-span-9 space-y-4">
                                             {/* Product Title + Status */}
                                             <div className="flex items-start justify-between">
                                                 <div>
@@ -384,8 +420,7 @@ export function ProductDetail({ productId, onClose, initialStartDate, initialEnd
                                                 </div>
                                             </div>
 
-                                            {/* Metrics Grid - CYBE Style */}
-                                            {/* Usar siempre datos desde última compra, NO del período seleccionado */}
+                                            {/* Metrics Grid - CYBE Style - Ahora más ancho */}
                                             <ProductMetricsGrid
                                                 ritmoVenta={data?.ritmoDiario || clasificacion?.paresPorDia || null}
                                                 diasStock={data?.diasStock || null}
@@ -417,45 +452,6 @@ export function ProductDetail({ productId, onClose, initialStartDate, initialEnd
                                                 />
                                             )}
                                         </div>
-
-                                        {/* Right Column: Top Ventas por Tienda */}
-                                        {topTiendas.length > 0 && (
-                                            <div className="lg:col-span-3">
-                                                <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden h-full flex flex-col">
-                                                    <div className="px-3 py-2 bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
-                                                        <h3 className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                                                            <Store className="text-blue-600 dark:text-blue-400" size={14} />
-                                                            Top Ventas por Tienda
-                                                        </h3>
-                                                    </div>
-                                                    <div className="flex-1 overflow-y-auto max-h-[320px] custom-scrollbar">
-                                                        <table className="w-full text-sm">
-                                                            <thead className="bg-slate-50 dark:bg-slate-700/30 sticky top-0">
-                                                                <tr>
-                                                                    <th className="py-2 px-3 text-left font-semibold text-slate-600 dark:text-slate-400 text-xs">Tienda</th>
-                                                                    <th className="py-2 px-3 text-center font-semibold text-slate-600 dark:text-slate-400 text-xs">Un.</th>
-                                                                    <th className="py-2 px-3 text-right font-semibold text-slate-600 dark:text-slate-400 text-xs">$</th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody>
-                                                                {topTiendas.map((s: any, idx: number) => (
-                                                                    <tr key={s.id} className="border-t border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                                                                        <td className="py-2 px-3 font-medium text-slate-800 dark:text-slate-200 truncate max-w-[100px] text-xs" title={s.descripcion}>
-                                                                            <span className="text-slate-400 dark:text-slate-500 mr-1">{idx + 1}.</span>
-                                                                            {s.descripcion?.replace('Stadium ', 'S')}
-                                                                        </td>
-                                                                        <td className="py-2 px-3 text-center font-bold text-base text-slate-800 dark:text-slate-100">{s.ttlunidadesVenta || 0}</td>
-                                                                        <td className="py-2 px-3 text-right font-mono font-bold text-base text-emerald-600 dark:text-emerald-400">
-                                                                            ${Number(s.ttlimporteVenta || 0).toLocaleString('es-AR', { maximumFractionDigits: 0, notation: 'compact' })}
-                                                                        </td>
-                                                                    </tr>
-                                                                ))}
-                                                            </tbody>
-                                                        </table>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )}
                                     </div>
 
                                     {/* Unified Talla Table - Stock + Ventas */}

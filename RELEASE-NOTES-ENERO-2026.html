@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stadium Dashboard - Notas de la Versión Enero 2026</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #1e293b;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background: #fff;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding-bottom: 30px;
+            border-bottom: 3px solid #3b82f6;
+        }
+
+        .logo {
+            width: 60px;
+            height: 60px;
+            background: #3b82f6;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+            color: white;
+            font-size: 28px;
+            font-weight: bold;
+        }
+
+        h1 {
+            font-size: 28px;
+            color: #0f172a;
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+            color: #64748b;
+            font-size: 16px;
+        }
+
+        .date {
+            background: #f1f5f9;
+            display: inline-block;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            color: #475569;
+            margin-top: 15px;
+        }
+
+        h2 {
+            font-size: 22px;
+            color: #0f172a;
+            margin: 35px 0 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        h2 .emoji {
+            font-size: 24px;
+        }
+
+        h3 {
+            font-size: 18px;
+            color: #334155;
+            margin: 25px 0 12px;
+        }
+
+        p {
+            margin-bottom: 15px;
+            color: #475569;
+        }
+
+        .feature-box {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .feature-box.highlight {
+            background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
+            border-color: #93c5fd;
+        }
+
+        .feature-box.warning {
+            background: #fffbeb;
+            border-color: #fcd34d;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 14px;
+        }
+
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        th {
+            background: #f1f5f9;
+            font-weight: 600;
+            color: #334155;
+        }
+
+        tr:hover {
+            background: #f8fafc;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .status-fast { background: #dcfce7; color: #166534; }
+        .status-ok { background: #dbeafe; color: #1e40af; }
+        .status-slow { background: #fef3c7; color: #92400e; }
+        .status-clavo { background: #fee2e2; color: #991b1b; }
+        .status-sin-datos { background: #f1f5f9; color: #475569; }
+
+        ul {
+            margin: 15px 0;
+            padding-left: 25px;
+        }
+
+        li {
+            margin-bottom: 10px;
+            color: #475569;
+        }
+
+        .check-list {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .check-list li {
+            padding-left: 28px;
+            position: relative;
+        }
+
+        .check-list li::before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #22c55e;
+            font-weight: bold;
+        }
+
+        .pending-list li::before {
+            content: "⏳";
+            color: #f59e0b;
+        }
+
+        .footer {
+            margin-top: 50px;
+            padding-top: 30px;
+            border-top: 2px solid #e2e8f0;
+            text-align: center;
+            color: #94a3b8;
+            font-size: 14px;
+        }
+
+        .test-section {
+            background: #f0fdf4;
+            border: 1px solid #86efac;
+            border-radius: 12px;
+            padding: 20px;
+            margin: 25px 0;
+        }
+
+        .test-section h4 {
+            color: #166534;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+
+        .test-section ol {
+            padding-left: 20px;
+        }
+
+        .test-section li {
+            color: #166534;
+            margin-bottom: 8px;
+        }
+
+        @media print {
+            body {
+                padding: 20px;
+            }
+
+            .feature-box, .test-section {
+                break-inside: avoid;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">S</div>
+        <h1>Stadium Dashboard</h1>
+        <p class="subtitle">Notas de la Versión para Usuarios</p>
+        <span class="date">📅 Enero 2026</span>
+    </div>
+
+    <h2><span class="emoji">🎯</span> Clasificación Mejorada de Productos</h2>
+
+    <div class="feature-box highlight">
+        <p><strong>¡Ya no verás todos los productos como "lentos" al inicio de temporada!</strong></p>
+        <p>El sistema ahora espera tener suficiente información antes de clasificar un producto, evitando alertas falsas.</p>
+    </div>
+
+    <h3>¿Cómo funciona ahora?</h3>
+    <ul class="check-list">
+        <li>El sistema espera <strong>3 semanas de datos</strong> antes de clasificar</li>
+        <li>Usa las <strong>semanas restantes de temporada</strong> para calcular si un producto va bien</li>
+        <li><strong>Adidas</strong> se mide en quarters (13 semanas)</li>
+        <li><strong>Otras marcas</strong> se miden en semestres (26 semanas)</li>
+    </ul>
+
+    <h3>Nueva tabla de estados</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>Estado</th>
+                <th>Significado</th>
+                <th>¿Qué hacer?</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><span class="status-badge status-fast">🚀 Fast</span></td>
+                <td>Vende más rápido de lo esperado</td>
+                <td>Nada, está bien</td>
+            </tr>
+            <tr>
+                <td><span class="status-badge status-ok">✅ OK</span></td>
+                <td>Va al ritmo esperado</td>
+                <td>Monitorear</td>
+            </tr>
+            <tr>
+                <td><span class="status-badge status-slow">🐢 Slow</span></td>
+                <td>Por debajo del ritmo esperado</td>
+                <td>Considerar promoción</td>
+            </tr>
+            <tr>
+                <td><span class="status-badge status-clavo">🔥 Clavo</span></td>
+                <td>No llegará a venderse a tiempo</td>
+                <td>Liquidar urgente</td>
+            </tr>
+            <tr>
+                <td><span class="status-badge status-sin-datos">❓ Sin datos</span></td>
+                <td>Menos de 3 semanas de historial</td>
+                <td>Esperar</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <h3>Nueva información de stock</h3>
+    <p>Además del estado de ventas, ahora se muestra:</p>
+    <ul>
+        <li><strong>🟣 Saldo:</strong> Quedan menos de 30 unidades del producto</li>
+        <li><strong>🟠 Arrastre:</strong> Stock de temporada anterior que no se vendió</li>
+    </ul>
+
+    <h2><span class="emoji">🔍</span> Filtros Más Claros y Fáciles</h2>
+
+    <div class="feature-box">
+        <h3 style="margin-top: 0;">Iconos identificables</h3>
+        <p>Cada filtro activo ahora muestra su icono para identificarlo rápidamente:</p>
+        <ul>
+            <li>🏪 Tiendas</li>
+            <li>🏷️ Marcas</li>
+            <li>📦 Categorías</li>
+            <li>👥 Géneros</li>
+            <li>🚚 Proveedores</li>
+        </ul>
+    </div>
+
+    <div class="feature-box">
+        <h3 style="margin-top: 0;">Búsqueda dentro de filtros</h3>
+        <p>Al abrir cualquier filtro, ahora podés escribir para encontrar rápidamente la tienda, marca o categoría que buscás.</p>
+    </div>
+
+    <div class="feature-box">
+        <h3 style="margin-top: 0;">Ordenar filtros: A-Z o por ventas</h3>
+        <p>En el menú de <strong>⚙️ Configuración</strong> (arriba a la derecha), podés elegir cómo ordenar los filtros:</p>
+        <ul>
+            <li><strong>Por Ventas:</strong> Los más vendidos primero (por defecto)</li>
+            <li><strong>A-Z:</strong> Orden alfabético</li>
+        </ul>
+    </div>
+
+    <h2><span class="emoji">📊</span> Números Más Grandes</h2>
+    <p>Los valores en las tablas de "Ventas por Tienda" y "Comparativos" ahora se muestran con un tamaño mayor para facilitar la lectura.</p>
+
+    <h2><span class="emoji">💡</span> Tooltips en el Menú</h2>
+    <p>Cuando el menú lateral está colapsado (minimizado), al pasar el mouse por encima de cualquier icono aparece el nombre de la sección correspondiente.</p>
+
+    <h2><span class="emoji">💾</span> Tus Preferencias se Guardan</h2>
+    <p>La configuración de ordenamiento de filtros y el modo de comparación (52 semanas / Calendario) se guardan automáticamente en tu navegador. No tenés que configurarlo cada vez que entrás.</p>
+
+    <h2><span class="emoji">⚠️</span> Pendiente de Activar</h2>
+
+    <div class="feature-box warning">
+        <h3 style="margin-top: 0;">Panel de Incidencias para el Director</h3>
+        <p>El sistema de alertas automáticas <strong>está desarrollado</strong> pero aún no está conectado al botón "Incidencias" del menú lateral.</p>
+        <p><strong>Este sistema detectará automáticamente:</strong></p>
+        <ul>
+            <li>📦 <strong>Errores de reabastecimiento:</strong> Productos vendiendo en tienda pero sin stock en central para reponer</li>
+            <li>🔥 <strong>Clavos:</strong> Productos que tardarían más de un año en venderse al ritmo actual</li>
+        </ul>
+        <p style="margin-bottom: 0; margin-top: 15px;"><em>Contactar al equipo técnico para activar esta funcionalidad.</em></p>
+    </div>
+
+    <h2><span class="emoji">🏪</span> Clasificación de Depósitos/Tiendas</h2>
+
+    <div class="feature-box">
+        <h3 style="margin-top: 0;">Tabla de Stock por Talla mejorada</h3>
+        <p>La tabla de detalle de producto ahora clasifica correctamente las tiendas:</p>
+        <table>
+            <thead>
+                <tr>
+                    <th>Categoría</th>
+                    <th>Tiendas</th>
+                    <th>Comportamiento</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>🟡 Central</strong></td>
+                    <td>99, 999</td>
+                    <td>Aparecen primero, fondo amarillo</td>
+                </tr>
+                <tr>
+                    <td><strong>🟣 Outlet</strong></td>
+                    <td>STADIUM117, STADIUM131-SALDOS, OUTLET_Fuera_Temporada_940</td>
+                    <td>Sección separada, fondo púrpura</td>
+                </tr>
+                <tr>
+                    <td><strong>🔵 Web</strong></td>
+                    <td>WEB701_STADIUM, WEB702_MISSCAROL, WEB704_MERCADOLIBRE</td>
+                    <td>Solo muestra ventas (stock oculto)</td>
+                </tr>
+                <tr>
+                    <td><strong>⚫ Ocultas</strong></td>
+                    <td>Z_No_Disponible91, Venta X Mayor_802, DETALLES_900, RECLAMO_902, DESCARTE_903</td>
+                    <td>No aparecen en la tabla</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <h2><span class="emoji">📐</span> Mejoras de Layout</h2>
+
+    <div class="feature-box">
+        <h3 style="margin-top: 0;">Tablas de detalle lado a lado</h3>
+        <p>Cuando abrís dos tablas de métricas (ej: "Ventas por Tienda" y "Unidades por Marca"), ahora se muestran <strong>una al lado de la otra</strong> en lugar de apiladas verticalmente.</p>
+    </div>
+
+    <ul class="check-list">
+        <li><strong>Scroll horizontal eliminado:</strong> Se corrigió el gap que aparecía en el lado derecho del dashboard</li>
+        <li><strong>Sidebar no tapa contenido:</strong> El menú lateral ya no se superpone con las métricas</li>
+    </ul>
+
+    <h2><span class="emoji">🔧</span> Correcciones</h2>
+    <ul class="check-list">
+        <li><strong>Precio de venta (PVP) corregido:</strong> Se arregló un error que mostraba precios incorrectos en el detalle del producto</li>
+        <li><strong>Totales de stock corregidos:</strong> Los totales excluyen tiendas web y ocultas para reflejar stock real disponible</li>
+    </ul>
+
+    <div class="test-section">
+        <h4>📱 ¿Cómo probar las nuevas funciones?</h4>
+        <ol>
+            <li><strong>Clasificación:</strong> Entrá a "Sell Out" y verificá que productos nuevos aparezcan como "Sin datos" en lugar de "Slow"</li>
+            <li><strong>Búsqueda en filtros:</strong> Abrí cualquier filtro (ej: Marcas) y escribí en el campo de búsqueda</li>
+            <li><strong>Cambiar orden:</strong> Andá a ⚙️ Configuración y cambiá entre "Por Ventas" y "A-Z"</li>
+            <li><strong>Tooltips:</strong> Colapsá el menú lateral (flecha izquierda) y pasá el mouse por los iconos</li>
+            <li><strong>Clasificación de tiendas:</strong> Abrí el detalle de un producto y verificá que las tiendas ocultas no aparezcan, y que las tiendas web no muestren stock</li>
+            <li><strong>Tablas lado a lado:</strong> Abrí dos tablas de métricas y verificá que se acomoden horizontalmente</li>
+        </ol>
+    </div>
+
+    <div class="footer">
+        <p>Stadium Dashboard v2.1.2</p>
+        <p>Última actualización: 31 de Enero 2026</p>
+        <p>© 2026 Stadium - Todos los derechos reservados</p>
+    </div>
+</body>
+</html>
