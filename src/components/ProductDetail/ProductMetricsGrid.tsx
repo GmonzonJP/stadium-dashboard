@@ -72,29 +72,29 @@ export function ProductMetricsGrid({
   };
 
   const getRitmoIcon = () => {
-    if (ritmoVenta === null) return <Activity className="text-slate-400" size={18} />;
-    if (ritmoVenta >= 2) return <TrendingUp className="text-emerald-500" size={18} />;
-    if (ritmoVenta >= 0.5) return <Activity className="text-amber-500" size={18} />;
-    return <TrendingDown className="text-red-500" size={18} />;
+    if (ritmoVenta === null) return <Activity className="text-slate-400" size={16} />;
+    if (ritmoVenta >= 2) return <TrendingUp className="text-emerald-500" size={16} />;
+    if (ritmoVenta >= 0.5) return <Activity className="text-amber-500" size={16} />;
+    return <TrendingDown className="text-red-500" size={16} />;
   };
 
   return (
-    <div className="space-y-4">
-      {/* Fila 1: Ritmo, Días Stock, Pares/Día */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3">
-          <div className="flex items-center gap-2 mb-1">
+    <div className="space-y-3">
+      {/* Fila 1: Ritmo, Días Stock, Pares/Día, Margen */}
+      <div className="grid grid-cols-4 gap-2">
+        <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5">
+          <div className="flex items-center gap-1.5 mb-1">
             {getRitmoIcon()}
-            <span className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-semibold">Ritmo de Venta</span>
+            <span className="text-[9px] text-slate-500 dark:text-slate-400 uppercase font-semibold">Ritmo</span>
           </div>
-          <div className={`text-xl font-bold ${getRitmoColor()}`}>
+          <div className={`text-lg font-bold ${getRitmoColor()}`}>
             {getRitmoLabel()}
           </div>
         </div>
 
-        <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3">
-          <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-semibold mb-1">Días Stock</div>
-          <div className={`text-xl font-bold ${
+        <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5">
+          <div className="text-[9px] text-slate-500 dark:text-slate-400 uppercase font-semibold mb-1">Días Stock</div>
+          <div className={`text-lg font-bold ${
             diasStock !== null && diasStock > 365 ? 'text-red-600 dark:text-red-400' :
             diasStock !== null && diasStock > 180 ? 'text-amber-600 dark:text-amber-400' :
             diasStock !== null && diasStock < 30 ? 'text-orange-600 dark:text-orange-400' :
@@ -104,23 +104,20 @@ export function ProductMetricsGrid({
           </div>
         </div>
 
-        <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3">
-          <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-semibold mb-1">Pares/día</div>
-          <div className="text-xl font-bold text-slate-900 dark:text-white">
+        <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5">
+          <div className="text-[9px] text-slate-500 dark:text-slate-400 uppercase font-semibold mb-1">Pares/día</div>
+          <div className="text-lg font-bold text-slate-900 dark:text-white">
             {ritmoVenta !== null ? ritmoVenta.toFixed(2) : '-'}
           </div>
         </div>
-      </div>
 
-      {/* Fila 2: Margen, Costo, PVP */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className={`border rounded-xl p-3 ${
+        <div className={`border rounded-xl p-2.5 ${
           margenBruto !== null && margenBruto >= 40 ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' :
           margenBruto !== null && margenBruto < 20 ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' :
           'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700'
         }`}>
-          <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-semibold mb-1">Mg Bruto</div>
-          <div className={`text-xl font-bold ${
+          <div className="text-[9px] text-slate-500 dark:text-slate-400 uppercase font-semibold mb-1">Mg Bruto</div>
+          <div className={`text-lg font-bold ${
             margenBruto !== null && margenBruto >= 40 ? 'text-emerald-700 dark:text-emerald-400' :
             margenBruto !== null && margenBruto < 20 ? 'text-red-700 dark:text-red-400' :
             'text-slate-900 dark:text-white'
@@ -128,84 +125,105 @@ export function ProductMetricsGrid({
             {formatPercent(margenBruto)}
           </div>
         </div>
+      </div>
 
-        <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3">
-          <div className="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-semibold mb-1">Costo</div>
-          <div className="text-xl font-bold text-slate-900 dark:text-white">
+      {/* Fila 2: Costo, PVP, Últ.Costo, Stock */}
+      <div className="grid grid-cols-4 gap-2">
+        <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5">
+          <div className="text-[9px] text-slate-500 dark:text-slate-400 uppercase font-semibold mb-1">Costo+IVA</div>
+          <div className="text-lg font-bold text-slate-900 dark:text-white">
             {formatCurrency(costo)}
           </div>
         </div>
 
-        <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3">
-          <div className="text-[10px] text-emerald-600 dark:text-emerald-400 uppercase font-semibold mb-1">PVP</div>
-          <div className="text-xl font-bold text-emerald-700 dark:text-emerald-400">
+        <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-2.5">
+          <div className="text-[9px] text-emerald-600 dark:text-emerald-400 uppercase font-semibold mb-1">PVP</div>
+          <div className="text-lg font-bold text-emerald-700 dark:text-emerald-400">
             {formatCurrency(pvp)}
+          </div>
+        </div>
+
+        <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5">
+          <div className="text-[9px] text-slate-500 dark:text-slate-400 uppercase font-semibold mb-1">Últ.Costo</div>
+          <div className="text-lg font-bold text-slate-700 dark:text-slate-300">
+            {formatCurrency(ultimoCosto)}
+          </div>
+        </div>
+
+        <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-2.5 text-center">
+          <div className="text-[9px] text-emerald-600 dark:text-emerald-400 uppercase font-semibold mb-1">Stock</div>
+          <div className="text-lg font-bold text-emerald-700 dark:text-emerald-400">
+            {formatNumber(stock)}
           </div>
         </div>
       </div>
 
       {/* Fila 3: Fechas */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-4 gap-2">
         <div className="text-center p-2 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
           <div className="text-sm font-bold text-slate-900 dark:text-white">
             {fechaUltimaCompra || '-'}
           </div>
-          <div className="text-[10px] text-slate-500 dark:text-slate-400">Últ.Compra</div>
+          <div className="text-[9px] text-slate-500 dark:text-slate-400">Últ.Compra</div>
         </div>
 
         <div className="text-center p-2 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
           <div className="text-sm font-bold text-slate-900 dark:text-white">
             {fecha1raVenta || '-'}
           </div>
-          <div className="text-[10px] text-slate-500 dark:text-slate-400">1ra Venta</div>
+          <div className="text-[9px] text-slate-500 dark:text-slate-400">1ra Venta</div>
         </div>
 
         <div className="text-center p-2 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
           <div className="text-sm font-bold text-slate-900 dark:text-white">
             {fechaUltimaVenta || '-'}
           </div>
-          <div className="text-[10px] text-slate-500 dark:text-slate-400">Últ.Venta</div>
+          <div className="text-[9px] text-slate-500 dark:text-slate-400">Últ.Venta</div>
+        </div>
+
+        <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2 text-center">
+          <div className="text-sm font-bold text-slate-700 dark:text-slate-300">
+            {formatNumber(unidadesCompradas || 0)}
+          </div>
+          <div className="text-[9px] text-slate-500 dark:text-slate-400">Compradas</div>
         </div>
       </div>
 
-      {/* Fila 4: Ventas y Utilidad del período */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-3 text-center">
-          <div className="text-2xl font-bold text-blue-700 dark:text-blue-400">
+      {/* Fila 4: Unidades, Ventas $, Utilidad, % Vendido */}
+      <div className="grid grid-cols-4 gap-2">
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-2.5 text-center">
+          <div className="text-xl font-bold text-blue-700 dark:text-blue-400">
             {formatNumber(unidadesVendidas)}
           </div>
-          <div className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold">Unidades</div>
-          <div className="text-[9px] text-blue-400">desde ult. compra</div>
+          <div className="text-[9px] text-blue-600 dark:text-blue-400 font-semibold">Unidades</div>
+          <div className="text-[8px] text-blue-400">desde ult. compra</div>
         </div>
 
-        <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 text-center">
-          <div className="text-2xl font-bold text-emerald-700 dark:text-emerald-400">
+        <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-2.5 text-center">
+          <div className="text-xl font-bold text-emerald-700 dark:text-emerald-400">
             {ventasImporte !== undefined ? formatCurrency(ventasImporte) : '-'}
           </div>
-          <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">Ventas $</div>
-          <div className="text-[9px] text-emerald-400">desde ult. compra</div>
+          <div className="text-[9px] text-emerald-600 dark:text-emerald-400 font-semibold">Ventas $</div>
+          <div className="text-[8px] text-emerald-400">desde ult. compra</div>
         </div>
 
-        <div className={`border rounded-xl p-3 text-center ${
+        <div className={`border rounded-xl p-2.5 text-center ${
           utilidadVenta !== undefined && utilidadVenta > 0 ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' :
           utilidadVenta !== undefined && utilidadVenta < 0 ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' :
           'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700'
         }`}>
-          <div className={`text-2xl font-bold ${
+          <div className={`text-xl font-bold ${
             utilidadVenta !== undefined && utilidadVenta > 0 ? 'text-emerald-700 dark:text-emerald-400' :
             utilidadVenta !== undefined && utilidadVenta < 0 ? 'text-red-700 dark:text-red-400' :
             'text-slate-700 dark:text-slate-300'
           }`}>
             {utilidadVenta !== undefined ? formatCurrency(utilidadVenta) : '-'}
           </div>
-          <div className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">Utilidad</div>
-          <div className="text-[9px] text-slate-400">desde ult. compra</div>
+          <div className="text-[9px] text-slate-500 dark:text-slate-400 font-semibold">Utilidad</div>
+          <div className="text-[8px] text-slate-400">desde ult. compra</div>
         </div>
-      </div>
 
-      {/* Fila 5: Resumen Stock y Compra */}
-      <div className="grid grid-cols-4 gap-3">
-        <div className={`border rounded-xl p-3 text-center ${
+        <div className={`border rounded-xl p-2.5 text-center ${
           porcentajeVendido !== null && porcentajeVendido >= 80 ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' :
           porcentajeVendido !== null && porcentajeVendido >= 50 ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800' :
           porcentajeVendido !== null && porcentajeVendido < 50 ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' :
@@ -219,33 +237,12 @@ export function ProductMetricsGrid({
           }`}>
             {porcentajeVendido !== null ? `${porcentajeVendido.toFixed(0)}%` : '-'}
           </div>
-          <div className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">% Vendido</div>
+          <div className="text-[9px] text-slate-500 dark:text-slate-400 font-semibold">% Vendido</div>
           {unidadesCompradas && (
-            <div className="text-[9px] text-slate-400 dark:text-slate-500">
-              de {formatNumber(unidadesCompradas)} comp.
+            <div className="text-[8px] text-slate-400 dark:text-slate-500">
+              de {formatNumber(unidadesCompradas)}
             </div>
           )}
-        </div>
-
-        <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-center">
-          <div className="text-xl font-bold text-slate-700 dark:text-slate-300">
-            {formatCurrency(ultimoCosto)}
-          </div>
-          <div className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">Últ.Costo</div>
-        </div>
-
-        <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3 text-center">
-          <div className="text-xl font-bold text-emerald-700 dark:text-emerald-400">
-            {formatNumber(stock)}
-          </div>
-          <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">Stock</div>
-        </div>
-
-        <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-center">
-          <div className="text-xl font-bold text-slate-700 dark:text-slate-300">
-            {formatNumber(unidadesCompradas || 0)}
-          </div>
-          <div className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">Compradas</div>
         </div>
       </div>
     </div>
