@@ -313,12 +313,18 @@ pm2 restart stadium-dashboard
 
 ## Acceso SSH
 
-```bash
-# Desde red externa
-ssh -p 2224 usuario@179.27.76.130
+| Parámetro | Valor |
+|-----------|-------|
+| **Usuario** | aisrvadmin |
+| **Password (sudo)** | aisrvadmin |
+| **Key** | .ssh/stadium_deploy_key |
 
-# Desde red interna
-ssh usuario@10.120.0.24
+```bash
+# Desde red externa (sin VPN)
+ssh -i .ssh/stadium_deploy_key -p 2224 aisrvadmin@179.27.76.130
+
+# Desde red interna (con VPN)
+ssh -i .ssh/stadium_deploy_key aisrvadmin@10.120.0.24
 ```
 
 ## URLs de Acceso

@@ -56,3 +56,6 @@ logs/
 # Editor directories
 .cursor/
 .claude/
+
+# SSH Keys
+.ssh/
