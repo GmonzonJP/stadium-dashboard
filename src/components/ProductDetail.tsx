@@ -2,19 +2,17 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ArrowLeft, Store, Calendar, Package, ChevronDown } from 'lucide-react';
+import { X, ArrowLeft, Store, Calendar, Package, ChevronDown, TrendingUp, Box, DollarSign, Percent, Clock, ShoppingCart } from 'lucide-react';
 import { cn, getProductImageUrl } from '@/lib/utils';
 import { TallaGaussianOverlayChart } from './TallaGaussianOverlayChart';
 import { ProductInsights } from './ProductInsights';
 import { ProductStatusBadge, SaldoBadge } from './ProductStatusBadge';
 import { UnifiedTallaTable } from './ProductDetail/UnifiedTallaTable';
 import { RelatedColors } from './ProductDetail/RelatedColors';
-import { ProductMetricsGrid } from './ProductDetail/ProductMetricsGrid';
 import { HistorialAnual } from './ProductDetail/HistorialAnual';
 import { clasificarProductoCompleto } from '@/lib/producto-classifier';
 import { DEPOSITOS_CONFIG, UMBRALES } from '@/types/sell-out';
 
-// Helper para formatear fecha local sin conversión UTC
 const formatDateLocal = (date: Date): string => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -29,20 +27,48 @@ interface ProductDetailProps {
     initialEndDate?: string;
 }
 
+// Componente de métrica compacta
+function MetricCard({ label, value, subValue, color = 'default', icon: Icon }: {
+    label: string;
+    value: string | number;
+    subValue?: string;
+    color?: 'default' | 'green' | 'blue' | 'amber' | 'red';
+    icon?: any;
+}) {
+    const colorClasses = {
+        default: 'text-white',
+        green: 'text-emerald-400',
+        blue: 'text-blue-400',
+        amber: 'text-amber-400',
+        red: 'text-red-400',
+    };
+
+    return (
+        <div className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50">
+            <div className="flex items-center gap-1.5 text-[10px] text-slate-400 uppercase tracking-wide mb-1">
+                {Icon && <Icon size={12} />}
+                {label}
+            </div>
+            <div className={cn("text-lg font-bold", colorClasses[color])}>
+                {value}
+            </div>
+            {subValue && (
+                <div className="text-[10px] text-slate-500 mt-0.5">{subValue}</div>
+            )}
+        </div>
+    );
+}
+
 export function ProductDetail({ productId, onClose, initialStartDate, initialEndDate }: ProductDetailProps) {
     const [data, setData] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [selectedColor, setSelectedColor] = useState<string | null>(null);
-
-    // Date range for filtering - inicializa con el período del dashboard
     const [startDate, setStartDate] = useState<string>(initialStartDate || '');
     const [endDate, setEndDate] = useState<string>(initialEndDate || '');
     const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
 
-    // Current displayed product
     const currentProductId = selectedColor || productId;
 
-    // Aplicar preset de fecha
     const applyDatePreset = (preset: string) => {
         const today = new Date();
         const year = today.getFullYear();
@@ -74,22 +100,6 @@ export function ProductDetail({ productId, onClose, initialStartDate, initialEnd
             case 'Mes Pasado':
                 start = new Date(year, today.getMonth() - 1, 1);
                 end = new Date(year, today.getMonth(), 0);
-                break;
-            case 'Q1':
-                start = new Date(year, 0, 1);
-                end = new Date(year, 2, 31);
-                break;
-            case 'Q2':
-                start = new Date(year, 3, 1);
-                end = new Date(year, 5, 30);
-                break;
-            case 'Q3':
-                start = new Date(year, 6, 1);
-                end = new Date(year, 8, 30);
-                break;
-            case 'Q4':
-                start = new Date(year, 9, 1);
-                end = new Date(year, 11, 31);
                 break;
             default:
                 return;
@@ -123,18 +133,15 @@ export function ProductDetail({ productId, onClose, initialStartDate, initialEnd
         }
     }, [currentProductId, startDate, endDate]);
 
-    // Reset selected color when modal closes, and sync dates when modal opens
     useEffect(() => {
         if (!productId) {
             setSelectedColor(null);
         } else {
-            // Cuando se abre el modal, usar las fechas del dashboard
             if (initialStartDate) setStartDate(initialStartDate);
             if (initialEndDate) setEndDate(initialEndDate);
         }
     }, [productId, initialStartDate, initialEndDate]);
 
-    // Clasificar el producto
     const clasificacion = useMemo(() => {
         if (!data) return null;
         return clasificarProductoCompleto({
@@ -146,16 +153,11 @@ export function ProductDetail({ productId, onClose, initialStartDate, initialEnd
         });
     }, [data]);
 
-    // Preparar datos para UnifiedTallaTable
     const unifiedTableData = useMemo(() => {
         if (!data?.matrixData || !data?.tallasData) return null;
 
         const tallas = data.tallasData.map((t: any) => t.talla);
-
-        // Build tiendas data
         const tiendasMap = new Map<number, any>();
-
-        // Get unique store IDs
         const storeIds = data.sortedStoreIds || [];
 
         for (const storeId of storeIds) {
@@ -168,7 +170,6 @@ export function ProductDetail({ productId, onClose, initialStartDate, initialEnd
                 const matrixRow = data.matrixData.find((r: any) => r.talla === t.talla);
                 const cell = matrixRow?.[`store_${storeId}`];
                 const stock = cell?.stock || 0;
-                // Get sales from matrixData cell (already includes ventas)
                 const ventas = cell?.ventas || 0;
 
                 tallasData[t.talla] = { stock, ventas };
@@ -185,7 +186,6 @@ export function ProductDetail({ productId, onClose, initialStartDate, initialEnd
             });
         }
 
-        // Stock central por talla
         const stockCentralPorTalla: Record<string, number> = {};
         for (const t of data.tallasData) {
             let centralStock = 0;
@@ -203,16 +203,14 @@ export function ProductDetail({ productId, onClose, initialStartDate, initialEnd
         };
     }, [data]);
 
-    // Top 7 tiendas por ventas
     const topTiendas = useMemo(() => {
         if (!data?.sucursales) return [];
         return [...data.sucursales]
             .filter((s: any) => !DEPOSITOS_CONFIG.central.includes(s.id) && !DEPOSITOS_CONFIG.outlet.includes(s.id))
             .sort((a: any, b: any) => (b.ttlimporteVenta || 0) - (a.ttlimporteVenta || 0))
-            .slice(0, 7);
+            .slice(0, 5);
     }, [data]);
 
-    // Related colors
     const relatedColors = useMemo(() => {
         if (!data?.coloresRelacionados) return [];
         return data.coloresRelacionados.map((c: any) => ({
@@ -224,6 +222,17 @@ export function ProductDetail({ productId, onClose, initialStartDate, initialEnd
     }, [data]);
 
     const esSaldo = (data?.stock || 0) < UMBRALES.stockMinimoLiquidacion;
+
+    // Calcular métricas
+    const porcentajeVendido = data?.unidadesCompradas > 0
+        ? Math.round((data.unidadesVendidasDesdeUltCompra / data.unidadesCompradas) * 100)
+        : 0;
+
+    const formatCurrency = (val: number) => {
+        if (val >= 1000000) return `$${(val / 1000000).toFixed(1)}M`;
+        if (val >= 1000) return `$${(val / 1000).toFixed(0)}k`;
+        return `$${val.toFixed(0)}`;
+    };
 
     return (
         <AnimatePresence>
@@ -240,44 +249,40 @@ export function ProductDetail({ productId, onClose, initialStartDate, initialEnd
                         initial={{ opacity: 0, scale: 0.95, y: 20 }}
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                        className="fixed inset-4 bg-white dark:bg-slate-900 rounded-3xl z-[610] shadow-2xl flex flex-col overflow-hidden"
+                        className="fixed inset-4 bg-slate-900 rounded-2xl z-[610] shadow-2xl flex flex-col overflow-hidden"
                     >
-                        {/* Header - CYBE Style */}
-                        <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-gradient-to-r from-slate-50 to-white dark:from-slate-800 dark:to-slate-900">
-                            <div className="flex items-center space-x-4">
+                        {/* Header Compacto */}
+                        <div className="px-4 py-3 border-b border-slate-700/50 flex items-center justify-between bg-slate-800/50">
+                            <div className="flex items-center gap-4">
                                 <button
                                     onClick={selectedColor ? () => setSelectedColor(null) : onClose}
-                                    className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all"
+                                    className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white transition-all"
                                 >
-                                    <ArrowLeft size={24} />
+                                    <ArrowLeft size={20} />
                                 </button>
-                                <div>
-                                    <div className="flex items-center gap-3">
-                                        <span className="text-sm text-slate-500 dark:text-slate-400 font-mono">{data?.BaseCol || currentProductId}</span>
-                                        <span className="text-lg font-bold text-blue-600 dark:text-blue-400">{data?.DescripcionMarca || 'N/A'}</span>
-                                    </div>
+                                <div className="flex items-center gap-3">
+                                    <span className="text-xs text-slate-500 font-mono">{data?.BaseCol || currentProductId}</span>
+                                    <span className="text-base font-bold text-blue-400">{data?.DescripcionMarca || 'N/A'}</span>
+                                    {clasificacion && <ProductStatusBadge estado={clasificacion.estado} size="sm" />}
+                                    {esSaldo && <SaldoBadge size="sm" />}
                                 </div>
                             </div>
 
-                            {/* Date Range Picker - Estilo Dashboard */}
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2">
                                 <div className="relative">
                                     <button
                                         onClick={() => setIsDatePickerOpen(!isDatePickerOpen)}
                                         className={cn(
-                                            "flex items-center space-x-2 bg-slate-900/50 border border-slate-800 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
-                                            isDatePickerOpen
-                                                ? "text-white border-blue-500/50"
-                                                : "text-slate-400 hover:text-white"
+                                            "flex items-center gap-2 bg-slate-800 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs transition-colors",
+                                            isDatePickerOpen ? "text-white border-blue-500/50" : "text-slate-400 hover:text-white"
                                         )}
                                     >
-                                        <Calendar size={14} />
+                                        <Calendar size={12} />
                                         <span>
                                             {startDate && endDate
-                                                ? `${new Date(startDate + 'T00:00:00').toLocaleDateString('es-ES')} - ${new Date(endDate + 'T00:00:00').toLocaleDateString('es-ES')}`
-                                                : 'Todo el historial'}
+                                                ? `${new Date(startDate + 'T00:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })} - ${new Date(endDate + 'T00:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}`
+                                                : 'Todo'}
                                         </span>
-                                        <ChevronDown size={12} className={cn("transition-transform", isDatePickerOpen && "rotate-180")} />
                                     </button>
 
                                     <AnimatePresence>
@@ -285,28 +290,28 @@ export function ProductDetail({ productId, onClose, initialStartDate, initialEnd
                                             <>
                                                 <div className="fixed inset-0 z-[620]" onClick={() => setIsDatePickerOpen(false)} />
                                                 <motion.div
-                                                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                                                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                                                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                                    className="absolute right-0 top-full mt-2 w-56 bg-[#020617] border border-slate-800 rounded-xl shadow-2xl z-[630] py-1"
+                                                    initial={{ opacity: 0, y: 5 }}
+                                                    animate={{ opacity: 1, y: 0 }}
+                                                    exit={{ opacity: 0, y: 5 }}
+                                                    className="absolute right-0 top-full mt-1 w-44 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-[630] py-1"
                                                 >
-                                                    {['Hoy', 'Ayer', 'Ultimos 7 Dias', 'Ultimos 90 Dias', 'Este Mes', 'Mes Pasado', 'Q1', 'Q2', 'Q3', 'Q4'].map((preset) => (
+                                                    {['Hoy', 'Ayer', 'Ultimos 7 Dias', 'Ultimos 90 Dias', 'Este Mes', 'Mes Pasado'].map((preset) => (
                                                         <button
                                                             key={preset}
                                                             onClick={() => applyDatePreset(preset)}
-                                                            className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                                                            className="w-full text-left px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700 hover:text-white"
                                                         >
                                                             {preset}
                                                         </button>
                                                     ))}
                                                     {(startDate || endDate) && (
                                                         <>
-                                                            <div className="h-px bg-slate-800 my-1" />
+                                                            <div className="h-px bg-slate-700 my-1" />
                                                             <button
                                                                 onClick={() => applyDatePreset('clear')}
-                                                                className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-red-900/20 hover:text-red-300 transition-colors"
+                                                                className="w-full text-left px-3 py-1.5 text-xs text-red-400 hover:bg-red-900/20"
                                                             >
-                                                                Limpiar filtro
+                                                                Limpiar
                                                             </button>
                                                         </>
                                                     )}
@@ -318,9 +323,9 @@ export function ProductDetail({ productId, onClose, initialStartDate, initialEnd
 
                                 <button
                                     onClick={onClose}
-                                    className="p-2 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-xl text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-all"
+                                    className="p-1.5 hover:bg-slate-700 rounded-lg text-slate-400 hover:text-white transition-all"
                                 >
-                                    <X size={24} />
+                                    <X size={20} />
                                 </button>
                             </div>
                         </div>
@@ -328,86 +333,154 @@ export function ProductDetail({ productId, onClose, initialStartDate, initialEnd
                         <div className="flex-1 overflow-y-auto custom-scrollbar">
                             {isLoading ? (
                                 <div className="flex items-center justify-center h-full">
-                                    <div className="w-12 h-12 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
+                                    <div className="w-10 h-10 border-3 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
                                 </div>
                             ) : (
-                                <div className="p-6">
-                                    {/* Main Grid: Image + Info + Top Ventas */}
-                                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6">
-                                        {/* Left Column: Image + Color Variants */}
-                                        <div className="lg:col-span-3 space-y-4">
-                                            <div className="bg-slate-50 dark:bg-slate-800 rounded-2xl p-4 flex items-center justify-center min-h-[280px]">
+                                <div className="p-4">
+                                    {/* Row 1: Imagen + Métricas + Top Tiendas */}
+                                    <div className="grid grid-cols-12 gap-4 mb-4">
+                                        {/* Imagen pequeña */}
+                                        <div className="col-span-2">
+                                            <div className="bg-slate-800 rounded-xl p-2 aspect-square flex items-center justify-center">
                                                 <img
                                                     src={getProductImageUrl(data?.BaseCol || currentProductId)}
                                                     alt={data?.descripcionCorta || currentProductId}
-                                                    className="max-w-full max-h-[260px] object-contain"
+                                                    className="max-w-full max-h-full object-contain"
                                                     onError={(e) => {
-                                                        e.currentTarget.src = 'https://placehold.co/400x400/e5e7eb/9ca3af?text=Sin+Imagen';
+                                                        e.currentTarget.src = 'https://placehold.co/200x200/1e293b/64748b?text=?';
                                                     }}
                                                 />
                                             </div>
-                                            {/* Related Colors */}
+                                            {/* Colores relacionados */}
                                             {relatedColors.length > 1 && (
-                                                <RelatedColors
-                                                    colors={relatedColors}
-                                                    currentBaseCol={data?.BaseCol || currentProductId}
-                                                    onSelectColor={(baseCol) => setSelectedColor(baseCol)}
-                                                />
+                                                <div className="flex gap-1 mt-2 flex-wrap">
+                                                    {relatedColors.slice(0, 4).map((c: any) => (
+                                                        <button
+                                                            key={c.baseCol}
+                                                            onClick={() => setSelectedColor(c.baseCol)}
+                                                            className={cn(
+                                                                "w-8 h-8 rounded-md overflow-hidden border-2 transition-all",
+                                                                c.baseCol === (data?.BaseCol || currentProductId)
+                                                                    ? "border-blue-500"
+                                                                    : "border-slate-700 hover:border-slate-500"
+                                                            )}
+                                                        >
+                                                            <img
+                                                                src={c.imageUrl}
+                                                                alt={c.color}
+                                                                className="w-full h-full object-cover"
+                                                            />
+                                                        </button>
+                                                    ))}
+                                                </div>
                                             )}
                                         </div>
 
-                                        {/* Center Column: Product Info + Metrics */}
-                                        <div className="lg:col-span-6 space-y-4">
-                                            {/* Product Title + Status */}
-                                            <div className="flex items-start justify-between">
-                                                <div>
-                                                    <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 mb-1">
-                                                        <span>{data?.DescripcionColor || 'Color N/A'}</span>
-                                                    </div>
-                                                    <h2 className="text-xl font-bold text-slate-900 dark:text-white">
-                                                        {data?.descripcionCorta || currentProductId}
-                                                    </h2>
-                                                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                                                        {data?.DescripcionClase || 'N/A'} | {data?.DescripcionGenero || 'N/A'}
-                                                    </p>
+                                        {/* Métricas principales - Grid compacto */}
+                                        <div className="col-span-7">
+                                            <div className="grid grid-cols-4 gap-2 mb-2">
+                                                <MetricCard
+                                                    label="Stock"
+                                                    value={data?.stock?.toLocaleString() || 0}
+                                                    subValue={`de ${data?.unidadesCompradas?.toLocaleString() || 0} comp.`}
+                                                    icon={Box}
+                                                    color={data?.stock > 100 ? 'amber' : 'default'}
+                                                />
+                                                <MetricCard
+                                                    label="Vendidas"
+                                                    value={data?.unidadesVendidasDesdeUltCompra?.toLocaleString() || 0}
+                                                    subValue={`${porcentajeVendido}% del total`}
+                                                    icon={ShoppingCart}
+                                                    color="green"
+                                                />
+                                                <MetricCard
+                                                    label="Venta $"
+                                                    value={formatCurrency(data?.importeVentaDesdeUltCompra || 0)}
+                                                    subValue="desde últ. compra"
+                                                    icon={DollarSign}
+                                                    color="green"
+                                                />
+                                                <MetricCard
+                                                    label="Utilidad"
+                                                    value={formatCurrency(
+                                                        data?.importeVentaDesdeUltCompra && data?.ultimoCosto
+                                                            ? data.importeVentaDesdeUltCompra - (data.unidadesVendidasDesdeUltCompra * data.ultimoCosto * 1.22)
+                                                            : 0
+                                                    )}
+                                                    subValue="bruta estimada"
+                                                    icon={TrendingUp}
+                                                    color="green"
+                                                />
+                                            </div>
+                                            <div className="grid grid-cols-5 gap-2">
+                                                <MetricCard
+                                                    label="Días Stock"
+                                                    value={data?.diasStock || '-'}
+                                                    color={data?.diasStock > 180 ? 'red' : data?.diasStock > 90 ? 'amber' : 'default'}
+                                                    icon={Clock}
+                                                />
+                                                <MetricCard
+                                                    label="Par/Día"
+                                                    value={data?.ritmoDiario?.toFixed(1) || '-'}
+                                                    color={data?.ritmoDiario > 1 ? 'green' : 'default'}
+                                                />
+                                                <MetricCard
+                                                    label="Margen"
+                                                    value={data?.margen ? `${data.margen.toFixed(0)}%` : '-'}
+                                                    color={data?.margen >= 30 ? 'green' : data?.margen >= 15 ? 'amber' : 'red'}
+                                                    icon={Percent}
+                                                />
+                                                <MetricCard
+                                                    label="Costo"
+                                                    value={`$${((data?.ultimoCosto || 0) * 1.22).toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+                                                    subValue="con IVA"
+                                                />
+                                                <MetricCard
+                                                    label="PVP"
+                                                    value={`$${(data?.pvp || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+                                                    color="blue"
+                                                />
+                                            </div>
+                                            {/* Fechas en línea */}
+                                            <div className="flex gap-4 mt-2 text-[10px] text-slate-500">
+                                                {data?.fechaUltCompraFormatted && (
+                                                    <span>Últ. Compra: <span className="text-slate-400">{data.fechaUltCompraFormatted}</span></span>
+                                                )}
+                                                {data?.primeraVentaFormatted && (
+                                                    <span>1ra Venta: <span className="text-slate-400">{data.primeraVentaFormatted}</span></span>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Top Tiendas - Compacto */}
+                                        <div className="col-span-3">
+                                            <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 h-full">
+                                                <div className="px-3 py-2 border-b border-slate-700/50 flex items-center gap-2">
+                                                    <Store size={12} className="text-blue-400" />
+                                                    <span className="text-xs font-medium text-slate-300">Top Tiendas</span>
                                                 </div>
-                                                <div className="flex items-center gap-2">
-                                                    {clasificacion && (
-                                                        <ProductStatusBadge estado={clasificacion.estado} size="lg" />
-                                                    )}
-                                                    {esSaldo && <SaldoBadge size="md" />}
-                                                    {data?.esCarryover && (
-                                                        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-300" title="Producto que se vende todo el año (no estacional)">
-                                                            🔄 Carryover
-                                                        </span>
-                                                    )}
+                                                <div className="p-2 space-y-1">
+                                                    {topTiendas.map((s: any, idx: number) => (
+                                                        <div key={s.id} className="flex items-center justify-between text-xs py-1 px-2 rounded hover:bg-slate-700/30">
+                                                            <span className="text-slate-400 truncate max-w-[100px]">
+                                                                <span className="text-slate-500 mr-1">{idx + 1}.</span>
+                                                                {s.descripcion?.replace('STADIUM', 'S').replace('Stadium ', 'S')}
+                                                            </span>
+                                                            <div className="flex items-center gap-3">
+                                                                <span className="font-bold text-white">{s.ttlunidadesVenta || 0}</span>
+                                                                <span className="font-mono text-emerald-400">{formatCurrency(s.ttlimporteVenta || 0)}</span>
+                                                            </div>
+                                                        </div>
+                                                    ))}
                                                 </div>
                                             </div>
+                                        </div>
+                                    </div>
 
-                                            {/* Metrics Grid - CYBE Style */}
-                                            {/* Usar siempre datos desde última compra, NO del período seleccionado */}
-                                            <ProductMetricsGrid
-                                                ritmoVenta={data?.ritmoDiario || clasificacion?.paresPorDia || null}
-                                                diasStock={data?.diasStock || null}
-                                                stock={data?.stock || 0}
-                                                margenBruto={data?.margen || null}
-                                                costo={(data?.ultimoCosto || 0) * 1.22}
-                                                pvp={data?.pvp || data?.precioVenta || 0}
-                                                unidadesVendidas={data?.unidadesVendidasDesdeUltCompra || 0}
-                                                unidadesCompradas={data?.unidadesCompradas || 0}
-                                                ultimoCosto={data?.ultimoCosto || 0}
-                                                fechaUltimaCompra={data?.fechaUltCompraFormatted}
-                                                fecha1raVenta={data?.primeraVentaFormatted}
-                                                fechaUltimaVenta={data?.ultimaVentaFormatted}
-                                                ventasImporte={data?.importeVentaDesdeUltCompra || 0}
-                                                utilidadVenta={
-                                                    data?.importeVentaDesdeUltCompra && data?.ultimoCosto
-                                                        ? data.importeVentaDesdeUltCompra - (data.unidadesVendidasDesdeUltCompra * data.ultimoCosto * 1.22)
-                                                        : undefined
-                                                }
-                                            />
-
-                                            {/* Historial Anual - Debajo de métricas */}
+                                    {/* Row 2: Historial + Distribución por Talla */}
+                                    <div className="grid grid-cols-12 gap-4 mb-4">
+                                        {/* Historial */}
+                                        <div className="col-span-4">
                                             {data?.historialAnual && data.historialAnual.length > 0 && (
                                                 <HistorialAnual
                                                     historial={data.historialAnual}
@@ -418,53 +491,27 @@ export function ProductDetail({ productId, onClose, initialStartDate, initialEnd
                                             )}
                                         </div>
 
-                                        {/* Right Column: Top Ventas por Tienda */}
-                                        {topTiendas.length > 0 && (
-                                            <div className="lg:col-span-3">
-                                                <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden h-full flex flex-col">
-                                                    <div className="px-3 py-2 bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
-                                                        <h3 className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                                                            <Store className="text-blue-600 dark:text-blue-400" size={14} />
-                                                            Top Ventas por Tienda
-                                                        </h3>
+                                        {/* Gráfico de tallas */}
+                                        <div className="col-span-8">
+                                            {data?.tallasData && data.tallasData.length > 0 && (
+                                                <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-3">
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <Package size={14} className="text-blue-400" />
+                                                        <span className="text-xs font-medium text-slate-300">Distribución por Talla</span>
                                                     </div>
-                                                    <div className="flex-1 overflow-y-auto max-h-[320px] custom-scrollbar">
-                                                        <table className="w-full text-sm">
-                                                            <thead className="bg-slate-50 dark:bg-slate-700/30 sticky top-0">
-                                                                <tr>
-                                                                    <th className="py-2 px-3 text-left font-semibold text-slate-600 dark:text-slate-400 text-xs">Tienda</th>
-                                                                    <th className="py-2 px-3 text-center font-semibold text-slate-600 dark:text-slate-400 text-xs">Un.</th>
-                                                                    <th className="py-2 px-3 text-right font-semibold text-slate-600 dark:text-slate-400 text-xs">$</th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody>
-                                                                {topTiendas.map((s: any, idx: number) => (
-                                                                    <tr key={s.id} className="border-t border-slate-100 dark:border-slate-700/50 hover:bg-slate-50 dark:hover:bg-slate-700/30">
-                                                                        <td className="py-2 px-3 font-medium text-slate-800 dark:text-slate-200 truncate max-w-[100px] text-xs" title={s.descripcion}>
-                                                                            <span className="text-slate-400 dark:text-slate-500 mr-1">{idx + 1}.</span>
-                                                                            {s.descripcion?.replace('Stadium ', 'S')}
-                                                                        </td>
-                                                                        <td className="py-2 px-3 text-center font-bold text-base text-slate-800 dark:text-slate-100">{s.ttlunidadesVenta || 0}</td>
-                                                                        <td className="py-2 px-3 text-right font-mono font-bold text-base text-emerald-600 dark:text-emerald-400">
-                                                                            ${Number(s.ttlimporteVenta || 0).toLocaleString('es-AR', { maximumFractionDigits: 0, notation: 'compact' })}
-                                                                        </td>
-                                                                    </tr>
-                                                                ))}
-                                                            </tbody>
-                                                        </table>
-                                                    </div>
+                                                    <TallaGaussianOverlayChart tallasData={data.tallasData} height={180} />
                                                 </div>
-                                            </div>
-                                        )}
+                                            )}
+                                        </div>
                                     </div>
 
-                                    {/* Unified Talla Table - Stock + Ventas */}
+                                    {/* Row 3: Tabla de Stock y Ventas por Talla */}
                                     {unifiedTableData && (
-                                        <div className="mb-6">
-                                            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
-                                                <Package className="text-blue-600 dark:text-blue-400" size={20} />
-                                                Stock y Ventas por Talla
-                                            </h3>
+                                        <div className="mb-4">
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <Package size={14} className="text-blue-400" />
+                                                <span className="text-sm font-medium text-white">Stock y Ventas por Talla</span>
+                                            </div>
                                             <UnifiedTallaTable
                                                 tallas={unifiedTableData.tallas}
                                                 tiendas={unifiedTableData.tiendas}
@@ -473,20 +520,7 @@ export function ProductDetail({ productId, onClose, initialStartDate, initialEnd
                                         </div>
                                     )}
 
-                                    {/* Gaussian Chart */}
-                                    {data?.tallasData && data.tallasData.length > 0 && (
-                                        <div className="mb-6">
-                                            <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-3 flex items-center gap-2">
-                                                <Package className="text-blue-600 dark:text-blue-400" size={20} />
-                                                Distribución por Talla
-                                            </h3>
-                                            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
-                                                <TallaGaussianOverlayChart tallasData={data.tallasData} height={300} />
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {/* Insights */}
+                                    {/* Insights al final */}
                                     {data?.insights && data.insights.length > 0 && (
                                         <ProductInsights insights={data.insights} />
                                     )}
