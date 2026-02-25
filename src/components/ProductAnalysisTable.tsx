@@ -204,7 +204,7 @@ export function ProductAnalysisTable() {
     };
 
     const SortHeader = ({ column, label, align = 'right' }: { column: SortColumn; label: string; align?: 'left' | 'right' | 'center' }) => (
-        <th className={cn("p-3 text-xs font-bold text-slate-500 uppercase tracking-wider", `text-${align}`)}>
+        <th className={cn("p-3 text-[11px] font-bold text-blue-300/70 uppercase tracking-wider border-b-2 border-blue-500/20", `text-${align}`)}>
             <button
                 onClick={() => handleSort(column)}
                 className={cn(
@@ -217,7 +217,7 @@ export function ProductAnalysisTable() {
                 {sortColumn === column ? (
                     sortDirection === 'asc' ? <ArrowUp size={12} className="text-blue-400" /> : <ArrowDown size={12} className="text-blue-400" />
                 ) : (
-                    <ArrowUpDown size={12} className="opacity-50" />
+                    <ArrowUpDown size={12} className="opacity-30" />
                 )}
             </button>
         </th>
@@ -292,11 +292,11 @@ export function ProductAnalysisTable() {
             </div>
 
             {/* Table */}
-            <div className="overflow-x-auto custom-scrollbar">
+            <div className="overflow-auto custom-scrollbar max-h-[75vh] relative" style={{ minHeight: '400px' }}>
                 <table className="w-full text-left border-collapse min-w-[1400px]">
-                    <thead className="bg-slate-800/30 sticky top-0 z-10">
-                        <tr>
-                            <th className="p-1 text-xs font-bold text-slate-500 uppercase tracking-wider w-24">Img</th>
+                    <thead className="sticky top-0 z-20">
+                        <tr className="bg-[#0c1425] shadow-[0_2px_8px_rgba(0,0,0,0.3)]">
+                            <th className="p-1 text-[11px] font-bold text-blue-300/70 uppercase tracking-wider w-24 border-b-2 border-blue-500/20">Img</th>
                             <SortHeader column="articulo" label="Artículo" align="left" />
                             <SortHeader column="unidades_vendidas" label="Unid." />
                             <SortHeader column="stock_total" label="Stock" />
@@ -310,9 +310,75 @@ export function ProductAnalysisTable() {
                             <SortHeader column="dias_stock" label="Días Stock" align="center" />
                             <SortHeader column="pares_por_dia" label="Par/Día" align="center" />
                             <SortHeader column="semaforo" label="Semáforo" align="center" />
-                            <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wider text-center">Acción</th>
+                            <th className="p-3 text-[11px] font-bold text-blue-300/70 uppercase tracking-wider text-center border-b-2 border-blue-500/20">Acción</th>
                         </tr>
                     </thead>
+
+                    {/* Totales fijo abajo */}
+                    {!isLoading && !error && products.length > 0 && data?.totals && (
+                        <tfoot className="sticky bottom-0 z-20">
+                            <tr className="bg-[#0c1425] shadow-[0_-2px_8px_rgba(0,0,0,0.3)]">
+                                <td className="p-3 border-t-2 border-blue-500/30" />
+                                <td className="p-3 border-t-2 border-blue-500/30">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs font-black text-blue-400 uppercase tracking-wider">Totales</span>
+                                        <span className="text-[10px] text-slate-500 bg-slate-800 px-2 py-0.5 rounded-full">{formatNumber(data.totals.productos_count)} productos</span>
+                                    </div>
+                                </td>
+                                <td className="p-3 text-right font-mono text-white font-bold tabular-nums border-t-2 border-blue-500/30">
+                                    {formatNumber(data.totals.unidades_vendidas)}
+                                </td>
+                                <td className="p-3 text-right border-t-2 border-blue-500/30">
+                                    <span className="font-mono text-emerald-400 font-bold tabular-nums">
+                                        {formatNumber(data.totals.stock_total)}
+                                    </span>
+                                    {data.totals.stock_pendiente > 0 && (
+                                        <span className="text-xs text-blue-400 ml-1">+{formatNumber(data.totals.stock_pendiente)}</span>
+                                    )}
+                                </td>
+                                <td className="p-3 border-t-2 border-blue-500/30" />
+                                <td className="p-3 border-t-2 border-blue-500/30" />
+                                <td className="p-3 text-right font-mono text-blue-400 font-bold tabular-nums text-sm border-t-2 border-blue-500/30">
+                                    {formatCurrency(data.totals.asp)}
+                                </td>
+                                <td className="p-3 text-right font-mono text-emerald-400 font-bold tabular-nums border-t-2 border-blue-500/30">
+                                    {formatCurrency(data.totals.venta_total)}
+                                </td>
+                                <td className="p-3 text-right border-t-2 border-blue-500/30">
+                                    {data.totals.margen_promedio != null && (
+                                        <div className={cn(
+                                            "inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-bold",
+                                            data.totals.margen_promedio >= 30
+                                                ? "bg-emerald-500/10 text-emerald-400"
+                                                : data.totals.margen_promedio >= 15
+                                                ? "bg-blue-500/10 text-blue-400"
+                                                : "bg-red-500/10 text-red-400"
+                                        )}>
+                                            {data.totals.margen_promedio.toFixed(1)}%
+                                        </div>
+                                    )}
+                                </td>
+                                <td className="p-3 text-right border-t-2 border-blue-500/30">
+                                    {data.totals.sell_through != null && (
+                                        <span className={cn(
+                                            "text-xs font-bold tabular-nums",
+                                            data.totals.sell_through >= 80 ? "text-emerald-400"
+                                                : data.totals.sell_through >= 50 ? "text-blue-400"
+                                                : "text-orange-400"
+                                        )}>
+                                            {data.totals.sell_through.toFixed(0)}%
+                                        </span>
+                                    )}
+                                </td>
+                                <td className="p-3 border-t-2 border-blue-500/30" />
+                                <td className="p-3 border-t-2 border-blue-500/30" />
+                                <td className="p-3 border-t-2 border-blue-500/30" />
+                                <td className="p-3 border-t-2 border-blue-500/30" />
+                                <td className="p-3 border-t-2 border-blue-500/30" />
+                            </tr>
+                        </tfoot>
+                    )}
+
                     <tbody className="divide-y divide-slate-800/50">
                         {isLoading ? (
                             <tr>
@@ -340,8 +406,7 @@ export function ProductAnalysisTable() {
                                 </td>
                             </tr>
                         ) : (
-                            <>
-                            {products.map((product, idx) => (
+                            products.map((product, idx) => (
                                 <motion.tr
                                     key={product.BaseCol}
                                     initial={{ opacity: 0 }}
@@ -543,66 +608,7 @@ export function ProductAnalysisTable() {
                                         </a>
                                     </td>
                                 </motion.tr>
-                            ))}
-                            {/* Fila de Totales */}
-                            {data?.totals && (
-                                <tr className="bg-slate-800/60 border-t-2 border-blue-500/30 sticky bottom-0">
-                                    <td className="p-3" />
-                                    <td className="p-3">
-                                        <span className="text-sm font-bold text-white">Total</span>
-                                        <span className="text-xs text-slate-400 ml-2">({formatNumber(data.totals.productos_count)} productos)</span>
-                                    </td>
-                                    <td className="p-3 text-right font-mono text-white font-bold tabular-nums">
-                                        {formatNumber(data.totals.unidades_vendidas)}
-                                    </td>
-                                    <td className="p-3 text-right font-mono text-emerald-400 font-bold tabular-nums">
-                                        {formatNumber(data.totals.stock_total)}
-                                        {data.totals.stock_pendiente > 0 && (
-                                            <span className="text-xs text-blue-400 ml-1">+{formatNumber(data.totals.stock_pendiente)}</span>
-                                        )}
-                                    </td>
-                                    <td className="p-3" />
-                                    <td className="p-3" />
-                                    <td className="p-3 text-right font-mono text-blue-400 font-bold tabular-nums text-sm">
-                                        {formatCurrency(data.totals.asp)}
-                                    </td>
-                                    <td className="p-3 text-right font-mono text-emerald-400 font-bold tabular-nums">
-                                        {formatCurrency(data.totals.venta_total)}
-                                    </td>
-                                    <td className="p-3 text-right">
-                                        {data.totals.margen_promedio != null && (
-                                            <div className={cn(
-                                                "inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-bold",
-                                                data.totals.margen_promedio >= 30
-                                                    ? "bg-emerald-500/10 text-emerald-400"
-                                                    : data.totals.margen_promedio >= 15
-                                                    ? "bg-blue-500/10 text-blue-400"
-                                                    : "bg-red-500/10 text-red-400"
-                                            )}>
-                                                {data.totals.margen_promedio.toFixed(1)}%
-                                            </div>
-                                        )}
-                                    </td>
-                                    <td className="p-3 text-right">
-                                        {data.totals.sell_through != null && (
-                                            <span className={cn(
-                                                "text-xs font-bold tabular-nums",
-                                                data.totals.sell_through >= 80 ? "text-emerald-400"
-                                                    : data.totals.sell_through >= 50 ? "text-blue-400"
-                                                    : "text-orange-400"
-                                            )}>
-                                                {data.totals.sell_through.toFixed(0)}%
-                                            </span>
-                                        )}
-                                    </td>
-                                    <td className="p-3" />
-                                    <td className="p-3" />
-                                    <td className="p-3" />
-                                    <td className="p-3" />
-                                    <td className="p-3" />
-                                </tr>
-                            )}
-                            </>
+                            ))
                         )}
                     </tbody>
                 </table>
