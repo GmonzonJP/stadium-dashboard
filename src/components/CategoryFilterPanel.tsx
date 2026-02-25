@@ -36,7 +36,7 @@ export function CategoryFilterPanel({
         }
         return 'grouped';
     });
-    const { filterSortOrder } = useFilters();
+    const { filterSortOrder, filterData } = useFilters();
 
     const toggleSection = useCallback((sectionId: number) => {
         setExpandedSections(prev => {
@@ -81,10 +81,21 @@ export function CategoryFilterPanel({
                     ...s,
                     categories: [...s.categories].sort((a, b) => a.label.localeCompare(b.label, 'es'))
                 }));
+        } else {
+            // Por ventas: ordenar categorías dentro de cada sección por ventas
+            const salesOrder = new Map(filterData.categories.map((c, i) => [c.id, i]));
+            result = [...result].map(s => ({
+                ...s,
+                categories: [...s.categories].sort((a, b) => {
+                    const orderA = salesOrder.get(a.id) ?? 9999;
+                    const orderB = salesOrder.get(b.id) ?? 9999;
+                    return orderA - orderB;
+                })
+            }));
         }
 
         return result;
-    }, [sections, searchQuery, filterSortOrder]);
+    }, [sections, searchQuery, filterSortOrder, filterData.categories]);
 
     // When searching, auto-expand matching sections
     const isExpanded = useCallback((sectionId: number) => {
@@ -118,9 +129,18 @@ export function CategoryFilterPanel({
             const query = searchQuery.toLowerCase();
             result = unique.filter(c => c.label.toLowerCase().includes(query));
         }
-        // Ordenar alfabéticamente
-        return [...result].sort((a, b) => a.label.localeCompare(b.label, 'es'));
-    }, [sections, searchQuery]);
+        // Ordenar según preferencia
+        if (filterSortOrder === 'alphabetical') {
+            return [...result].sort((a, b) => a.label.localeCompare(b.label, 'es'));
+        }
+        // Por ventas: usar el orden de filterData.categories (viene ordenado por ventas del API)
+        const salesOrder = new Map(filterData.categories.map((c, i) => [c.id, i]));
+        return [...result].sort((a, b) => {
+            const orderA = salesOrder.get(a.id) ?? 9999;
+            const orderB = salesOrder.get(b.id) ?? 9999;
+            return orderA - orderB;
+        });
+    }, [sections, searchQuery, filterSortOrder, filterData.categories]);
 
     const toggleViewMode = useCallback(() => {
         setViewMode(prev => {
