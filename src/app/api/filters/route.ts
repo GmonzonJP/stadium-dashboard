@@ -60,6 +60,7 @@ export async function GET() {
         FROM Articulos A
         WHERE A.IdSeccion IS NOT NULL
           AND A.IdClase IS NOT NULL
+          AND A.Descripcion NOT IN ('SALDO', '{Sin Definir}')
         GROUP BY A.IdSeccion, A.IdClase
         ORDER BY MAX(A.DescripcionSeccion), MAX(A.DescripcionClase)
       `;
