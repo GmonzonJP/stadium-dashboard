@@ -229,10 +229,11 @@ export function getProductStatusInfo(estado: ProductoEstado): ProductStatusInfo 
 }
 
 /**
- * Determina si un producto es "saldo" (stock < 30 unidades por BaseCol)
+ * Determina si un producto es "saldo" (stock > 0 y < 30 unidades por BaseCol)
+ * Stock = 0 no es saldo, es producto agotado.
  */
 export function esSaldo(stockTotal: number): boolean {
-  return stockTotal < UMBRALES.stockMinimoLiquidacion;
+  return stockTotal > 0 && stockTotal < UMBRALES.stockMinimoLiquidacion;
 }
 
 /**

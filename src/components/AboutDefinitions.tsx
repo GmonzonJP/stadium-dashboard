@@ -82,10 +82,10 @@ export function AboutDefinitions() {
                     <div className="border border-slate-700 rounded-lg p-3">
                         <h4 className="text-emerald-400 font-medium mb-2">Margen (%)</h4>
                         <code className="text-white bg-slate-800 px-2 py-1 rounded block mb-2">
-                            Margen = (Precio - Costo) / Precio × 100
+                            Margen = (Precio / Costo) - 1 × 100
                         </code>
                         <p className="text-slate-500 text-xs">
-                            Porcentaje de ganancia sobre el precio de venta. Un margen del 40% significa que el 40% del precio es ganancia.
+                            Porcentaje de ganancia sobre el costo. Un margen del 50% significa que se vende a 1.5x el costo.
                         </p>
                     </div>
 

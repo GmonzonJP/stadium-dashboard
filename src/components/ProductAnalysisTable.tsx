@@ -10,9 +10,11 @@ import {
     Package
 } from 'lucide-react';
 import { cn, getProductImageUrl } from '@/lib/utils';
+import { exportToXlsx, ExportColumn } from '@/lib/export-xlsx';
 import { ProductDetail } from './ProductDetail';
 import { EditablePriceCell } from './EditablePriceCell';
 import { AddToPriceQueueModal } from './AddToPriceQueueModal';
+import { ExportButton } from './ExportButton';
 
 interface Product {
     BaseCol: string;
@@ -45,8 +47,21 @@ interface Product {
     duration_days: number;
 }
 
+interface ProductTotals {
+    unidades_vendidas: number;
+    stock_total: number;
+    stock_pendiente: number;
+    venta_total: number;
+    cantidad_ultima_compra: number;
+    asp: number | null;
+    margen_promedio: number | null;
+    sell_through: number | null;
+    productos_count: number;
+}
+
 interface ProductAnalysisResponse {
     products: Product[];
+    totals?: ProductTotals;
     pagination: {
         page: number;
         pageSize: number;
@@ -73,7 +88,7 @@ type SortColumn =
     | 'precio_promedio_asp'
     | 'venta_total'
     | 'margen'
-    | 'markup'
+    | 'porcentaje_vendido'
     | 'ultima_compra'
     | 'dias_stock'
     | 'pares_por_dia'
@@ -95,7 +110,8 @@ export function ProductAnalysisTable() {
     const [debouncedSearch, setDebouncedSearch] = useState('');
     const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
     const [page, setPage] = useState(1);
-    const [pageSize] = useState(25);
+    const [pageSize, setPageSize] = useState(100);
+    const PAGE_SIZE_OPTIONS = [25, 50, 100, 200, -1]; // -1 = Todos
 
     // Price edit modal state
     const [priceEditData, setPriceEditData] = useState<{
@@ -117,10 +133,10 @@ export function ProductAnalysisTable() {
         return () => clearTimeout(timer);
     }, [searchQuery]);
 
-    // Reset page when filters change
+    // Reset page when filters, sorting or pageSize change
     useEffect(() => {
         setPage(1);
-    }, [selectedFilters, debouncedSearch]);
+    }, [selectedFilters, debouncedSearch, sortColumn, sortDirection, pageSize]);
 
     // Fetch data
     useEffect(() => {
@@ -135,7 +151,9 @@ export function ProductAnalysisTable() {
                         ...selectedFilters,
                         search: debouncedSearch,
                         page,
-                        pageSize
+                        pageSize,
+                        sortColumn,
+                        sortDirection
                     }),
                     cache: 'no-store'
                 });
@@ -156,98 +174,24 @@ export function ProductAnalysisTable() {
         }
 
         fetchData();
-    }, [selectedFilters, debouncedSearch, page, pageSize]);
+    }, [selectedFilters, debouncedSearch, page, pageSize, sortColumn, sortDirection]);
 
     // Handle sorting
+    // For text columns, default to ascending (A-Z); for numeric columns, default to descending (high to low)
     const handleSort = useCallback((column: SortColumn) => {
         if (sortColumn === column) {
             setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
         } else {
             setSortColumn(column);
-            setSortDirection('desc');
+            // Text columns default to ascending (A-Z)
+            const textColumns: SortColumn[] = ['articulo'];
+            setSortDirection(textColumns.includes(column) ? 'asc' : 'desc');
         }
     }, [sortColumn]);
 
-    // Sort data locally
-    const sortedProducts = data?.products ? [...data.products].sort((a, b) => {
-        let aVal: any;
-        let bVal: any;
-
-        switch (sortColumn) {
-            case 'articulo':
-                aVal = `${a.DescripcionMarca} ${a.DescripcionCorta}`.toLowerCase();
-                bVal = `${b.DescripcionMarca} ${b.DescripcionCorta}`.toLowerCase();
-                break;
-            case 'unidades_vendidas':
-                aVal = a.unidades_vendidas;
-                bVal = b.unidades_vendidas;
-                break;
-            case 'stock_total':
-                aVal = a.stock_total;
-                bVal = b.stock_total;
-                break;
-            case 'ultimo_costo':
-                aVal = a.ultimo_costo || 0;
-                bVal = b.ultimo_costo || 0;
-                break;
-            case 'pvp':
-                aVal = a.pvp || 0;
-                bVal = b.pvp || 0;
-                break;
-            case 'precio_promedio_asp':
-                aVal = a.precio_promedio_asp || 0;
-                bVal = b.precio_promedio_asp || 0;
-                break;
-            case 'venta_total':
-                aVal = a.venta_total;
-                bVal = b.venta_total;
-                break;
-            case 'margen':
-                aVal = a.margen || 0;
-                bVal = b.margen || 0;
-                break;
-            case 'markup':
-                aVal = a.markup || 0;
-                bVal = b.markup || 0;
-                break;
-            case 'ultima_compra':
-                aVal = a.ultima_compra_fecha ? new Date(a.ultima_compra_fecha).getTime() : 0;
-                bVal = b.ultima_compra_fecha ? new Date(b.ultima_compra_fecha).getTime() : 0;
-                break;
-            case 'dias_stock':
-                aVal = a.dias_stock || 999999;
-                bVal = b.dias_stock || 999999;
-                break;
-            case 'pares_por_dia':
-                aVal = a.pares_por_dia || 0;
-                bVal = b.pares_por_dia || 0;
-                break;
-            case 'semaforo':
-                const order = { red: 1, green: 2, black: 3, white: 4 };
-                aVal = order[a.semaforo.color] || 5;
-                bVal = order[b.semaforo.color] || 5;
-                break;
-            default:
-                return 0;
-        }
-
-        if (typeof aVal === 'string' && typeof bVal === 'string') {
-            return sortDirection === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
-        }
-        return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
-    }) : [];
-
-    // Filter by search locally (additional filtering)
-    const filteredProducts = sortedProducts.filter(p => {
-        if (!debouncedSearch) return true;
-        const search = debouncedSearch.toLowerCase();
-        return (
-            p.BaseCol.toLowerCase().includes(search) ||
-            p.DescripcionMarca.toLowerCase().includes(search) ||
-            p.DescripcionCorta?.toLowerCase().includes(search) ||
-            p.Descripcion?.toLowerCase().includes(search)
-        );
-    });
+    // Los productos ya vienen ordenados del servidor
+    // La búsqueda también se hace en el servidor
+    const products = data?.products || [];
 
     const formatCurrency = (value: number | null) => {
         if (value == null) return '—';
@@ -292,15 +236,57 @@ export function ProductAnalysisTable() {
                         </p>
                     </div>
                 </div>
-                
-                <div className="relative w-full md:w-80">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
-                    <input
-                        type="text"
-                        placeholder="Buscar producto..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full bg-slate-800/50 border border-slate-700 rounded-xl py-2 pl-10 pr-4 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+
+                <div className="flex items-center gap-4">
+                    {/* Page size selector */}
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-500">Mostrar:</span>
+                        <select
+                            value={pageSize}
+                            onChange={(e) => setPageSize(Number(e.target.value))}
+                            className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                        >
+                            {PAGE_SIZE_OPTIONS.map(size => (
+                                <option key={size} value={size}>
+                                    {size === -1 ? 'Todos' : size}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Search */}
+                    <div className="relative w-full md:w-80">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
+                        <input
+                            type="text"
+                            placeholder="Buscar producto..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full bg-slate-800/50 border border-slate-700 rounded-xl py-2 pl-10 pr-4 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                        />
+                    </div>
+
+                    <ExportButton
+                        onClick={() => {
+                            const cols: ExportColumn<Product>[] = [
+                                { header: 'Artículo', accessor: r => r.BaseCol },
+                                { header: 'Marca', accessor: r => r.DescripcionMarca },
+                                { header: 'Descripción', accessor: r => r.Descripcion },
+                                { header: 'Unidades', accessor: r => r.unidades_vendidas },
+                                { header: 'Stock', accessor: r => r.stock_total },
+                                { header: 'Costo', accessor: r => r.ultimo_costo },
+                                { header: 'PVP', accessor: r => r.pvp },
+                                { header: 'ASP', accessor: r => r.precio_promedio_asp != null ? Math.round(r.precio_promedio_asp) : null },
+                                { header: 'Venta $', accessor: r => Math.round(r.venta_total) },
+                                { header: 'Margen %', accessor: r => r.margen != null ? Number(r.margen.toFixed(1)) : null },
+                                { header: '% Vendido', accessor: r => r.cantidad_ultima_compra != null && r.cantidad_ultima_compra > 0 ? Number(((r.unidades_vendidas / r.cantidad_ultima_compra) * 100).toFixed(1)) : null },
+                                { header: 'Últ. Compra', accessor: r => r.ultima_compra_fecha ? new Date(r.ultima_compra_fecha).toLocaleDateString('es-AR') : '' },
+                                { header: 'Días Stock', accessor: r => r.dias_stock != null ? Math.round(r.dias_stock) : null },
+                                { header: 'Par/Día', accessor: r => r.pares_por_dia != null ? Number(r.pares_por_dia.toFixed(2)) : null },
+                            ];
+                            exportToXlsx(products, cols, 'analisis-productos', 'Productos');
+                        }}
+                        disabled={products.length === 0}
                     />
                 </div>
             </div>
@@ -310,7 +296,7 @@ export function ProductAnalysisTable() {
                 <table className="w-full text-left border-collapse min-w-[1400px]">
                     <thead className="bg-slate-800/30 sticky top-0 z-10">
                         <tr>
-                            <th className="p-3 text-xs font-bold text-slate-500 uppercase tracking-wider w-10">Img</th>
+                            <th className="p-1 text-xs font-bold text-slate-500 uppercase tracking-wider w-24">Img</th>
                             <SortHeader column="articulo" label="Artículo" align="left" />
                             <SortHeader column="unidades_vendidas" label="Unid." />
                             <SortHeader column="stock_total" label="Stock" />
@@ -319,7 +305,7 @@ export function ProductAnalysisTable() {
                             <SortHeader column="precio_promedio_asp" label="ASP" />
                             <SortHeader column="venta_total" label="Venta $" />
                             <SortHeader column="margen" label="Margen" />
-                            <SortHeader column="markup" label="Markup" />
+                            <SortHeader column="porcentaje_vendido" label="% Vendido" />
                             <SortHeader column="ultima_compra" label="Últ. Compra" align="center" />
                             <SortHeader column="dias_stock" label="Días Stock" align="center" />
                             <SortHeader column="pares_por_dia" label="Par/Día" align="center" />
@@ -347,14 +333,15 @@ export function ProductAnalysisTable() {
                                     </button>
                                 </td>
                             </tr>
-                        ) : filteredProducts.length === 0 ? (
+                        ) : products.length === 0 ? (
                             <tr>
                                 <td colSpan={15} className="p-12 text-center text-slate-500 italic">
                                     No se encontraron productos
                                 </td>
                             </tr>
                         ) : (
-                            filteredProducts.map((product, idx) => (
+                            <>
+                            {products.map((product, idx) => (
                                 <motion.tr
                                     key={product.BaseCol}
                                     initial={{ opacity: 0 }}
@@ -363,22 +350,22 @@ export function ProductAnalysisTable() {
                                     className="hover:bg-slate-800/30 transition-colors group"
                                 >
                                     {/* Imagen */}
-                                    <td className="p-2">
+                                    <td className="p-1">
                                         <button
                                             onClick={() => setSelectedProductId(product.BaseCol)}
-                                            className="w-10 h-10 bg-white rounded-lg overflow-hidden border border-slate-700 group-hover:border-blue-500/50 transition-all"
+                                            className="w-20 h-20 bg-white rounded-lg overflow-hidden border border-slate-700 group-hover:border-blue-500/50 transition-all shadow-sm hover:shadow-md"
                                         >
                                             <img
                                                 src={getProductImageUrl(product.BaseCol)}
                                                 alt={product.BaseCol}
                                                 className="w-full h-full object-contain"
                                                 onError={(e) => {
-                                                    e.currentTarget.src = 'https://placehold.co/80x80/1e293b/475569?text=IMG';
+                                                    e.currentTarget.src = 'https://placehold.co/128x128/1e293b/475569?text=IMG';
                                                 }}
                                             />
                                         </button>
                                     </td>
-                                    
+
                                     {/* Artículo */}
                                     <td className="p-3">
                                         <button
@@ -394,12 +381,12 @@ export function ProductAnalysisTable() {
                                             <div className="text-xs text-slate-600 font-mono">{product.BaseCol}</div>
                                         </button>
                                     </td>
-                                    
+
                                     {/* Unidades */}
                                     <td className="p-3 text-right font-mono text-white font-bold tabular-nums">
                                         {formatNumber(product.unidades_vendidas)}
                                     </td>
-                                    
+
                                     {/* Stock */}
                                     <td className="p-3 text-right">
                                         <span className={cn(
@@ -414,12 +401,12 @@ export function ProductAnalysisTable() {
                                             </span>
                                         )}
                                     </td>
-                                    
+
                                     {/* Costo */}
                                     <td className="p-3 text-right font-mono text-slate-400 tabular-nums text-sm">
                                         {formatCurrency(product.ultimo_costo)}
                                     </td>
-                                    
+
                                     {/* PVP */}
                                     <td className="p-3 text-right">
                                         <EditablePriceCell
@@ -430,25 +417,25 @@ export function ProductAnalysisTable() {
                                             formatCurrency={formatCurrency}
                                         />
                                     </td>
-                                    
+
                                     {/* ASP */}
                                     <td className="p-3 text-right">
                                         <span className="font-mono text-blue-400 tabular-nums font-bold text-sm" title="Precio Promedio = Ventas / Unidades">
                                             {formatCurrency(product.precio_promedio_asp)}
                                         </span>
                                     </td>
-                                    
+
                                     {/* Venta Total */}
                                     <td className="p-3 text-right font-mono text-emerald-400 tabular-nums font-bold">
                                         {formatCurrency(product.venta_total)}
                                     </td>
-                                    
+
                                     {/* Margen */}
                                     <td className="p-3 text-right">
-                                        <div 
+                                        <div
                                             className={cn(
                                                 "inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-bold",
-                                                product.margen != null && product.margen >= 30 
+                                                product.margen != null && product.margen >= 30
                                                     ? "bg-emerald-500/10 text-emerald-400"
                                                     : product.margen != null && product.margen >= 15
                                                     ? "bg-blue-500/10 text-blue-400"
@@ -459,25 +446,36 @@ export function ProductAnalysisTable() {
                                             {product.margen != null ? `${product.margen.toFixed(1)}%` : '—'}
                                         </div>
                                     </td>
-                                    
-                                    {/* Markup */}
-                                    <td className="p-3 text-right text-xs text-slate-500 font-mono" title="(Precio - Costo) / Costo × 100">
-                                        {product.markup != null ? `${product.markup.toFixed(1)}%` : '—'}
+
+                                    {/* % Vendido */}
+                                    <td className="p-3 text-right">
+                                        {product.cantidad_ultima_compra != null && product.cantidad_ultima_compra > 0 ? (
+                                            <span className={cn(
+                                                "text-xs font-bold tabular-nums",
+                                                (product.unidades_vendidas / product.cantidad_ultima_compra) * 100 >= 80
+                                                    ? "text-emerald-400"
+                                                    : (product.unidades_vendidas / product.cantidad_ultima_compra) * 100 >= 50
+                                                    ? "text-blue-400"
+                                                    : "text-orange-400"
+                                            )}>
+                                                {((product.unidades_vendidas / product.cantidad_ultima_compra) * 100).toFixed(0)}%
+                                            </span>
+                                        ) : '—'}
                                     </td>
-                                    
+
                                     {/* Última Compra */}
                                     <td className="p-3 text-center text-xs text-slate-400">
-                                        {product.ultima_compra_fecha 
+                                        {product.ultima_compra_fecha
                                             ? new Date(product.ultima_compra_fecha).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })
                                             : '—'
                                         }
                                     </td>
-                                    
+
                                     {/* Días Stock */}
                                     <td className="p-3 text-center">
                                         <span className={cn(
                                             "text-xs font-bold px-2 py-1 rounded-full tabular-nums",
-                                            product.dias_stock != null && product.dias_stock > 180 
+                                            product.dias_stock != null && product.dias_stock > 180
                                                 ? "bg-red-500/10 text-red-400 border border-red-500/20"
                                                 : product.dias_stock != null && product.dias_stock > 90
                                                 ? "bg-orange-500/10 text-orange-400 border border-orange-500/20"
@@ -486,16 +484,16 @@ export function ProductAnalysisTable() {
                                             {product.dias_stock != null ? formatNumber(product.dias_stock) : '—'}
                                         </span>
                                     </td>
-                                    
+
                                     {/* Pares por Día */}
                                     <td className="p-3 text-center text-xs text-slate-400 font-mono tabular-nums">
                                         {product.pares_por_dia != null ? product.pares_por_dia.toFixed(2) : '—'}
                                     </td>
-                                    
+
                                     {/* Semáforo */}
                                     <td className="p-3 text-center">
                                         <div className="group/semaphore relative inline-block">
-                                            <div 
+                                            <div
                                                 className={cn(
                                                     "w-5 h-5 rounded-full mx-auto cursor-help",
                                                     SEMAPHORE_COLORS[product.semaforo.color].bg
@@ -531,7 +529,7 @@ export function ProductAnalysisTable() {
                                             </div>
                                         </div>
                                     </td>
-                                    
+
                                     {/* Acción */}
                                     <td className="p-3 text-center">
                                         <a
@@ -545,40 +543,104 @@ export function ProductAnalysisTable() {
                                         </a>
                                     </td>
                                 </motion.tr>
-                            ))
+                            ))}
+                            {/* Fila de Totales */}
+                            {data?.totals && (
+                                <tr className="bg-slate-800/60 border-t-2 border-blue-500/30 sticky bottom-0">
+                                    <td className="p-3" />
+                                    <td className="p-3">
+                                        <span className="text-sm font-bold text-white">Total</span>
+                                        <span className="text-xs text-slate-400 ml-2">({formatNumber(data.totals.productos_count)} productos)</span>
+                                    </td>
+                                    <td className="p-3 text-right font-mono text-white font-bold tabular-nums">
+                                        {formatNumber(data.totals.unidades_vendidas)}
+                                    </td>
+                                    <td className="p-3 text-right font-mono text-emerald-400 font-bold tabular-nums">
+                                        {formatNumber(data.totals.stock_total)}
+                                        {data.totals.stock_pendiente > 0 && (
+                                            <span className="text-xs text-blue-400 ml-1">+{formatNumber(data.totals.stock_pendiente)}</span>
+                                        )}
+                                    </td>
+                                    <td className="p-3" />
+                                    <td className="p-3" />
+                                    <td className="p-3 text-right font-mono text-blue-400 font-bold tabular-nums text-sm">
+                                        {formatCurrency(data.totals.asp)}
+                                    </td>
+                                    <td className="p-3 text-right font-mono text-emerald-400 font-bold tabular-nums">
+                                        {formatCurrency(data.totals.venta_total)}
+                                    </td>
+                                    <td className="p-3 text-right">
+                                        {data.totals.margen_promedio != null && (
+                                            <div className={cn(
+                                                "inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-bold",
+                                                data.totals.margen_promedio >= 30
+                                                    ? "bg-emerald-500/10 text-emerald-400"
+                                                    : data.totals.margen_promedio >= 15
+                                                    ? "bg-blue-500/10 text-blue-400"
+                                                    : "bg-red-500/10 text-red-400"
+                                            )}>
+                                                {data.totals.margen_promedio.toFixed(1)}%
+                                            </div>
+                                        )}
+                                    </td>
+                                    <td className="p-3 text-right">
+                                        {data.totals.sell_through != null && (
+                                            <span className={cn(
+                                                "text-xs font-bold tabular-nums",
+                                                data.totals.sell_through >= 80 ? "text-emerald-400"
+                                                    : data.totals.sell_through >= 50 ? "text-blue-400"
+                                                    : "text-orange-400"
+                                            )}>
+                                                {data.totals.sell_through.toFixed(0)}%
+                                            </span>
+                                        )}
+                                    </td>
+                                    <td className="p-3" />
+                                    <td className="p-3" />
+                                    <td className="p-3" />
+                                    <td className="p-3" />
+                                    <td className="p-3" />
+                                </tr>
+                            )}
+                            </>
                         )}
                     </tbody>
                 </table>
             </div>
 
             {/* Pagination */}
-            {data && data.pagination && data.pagination.totalPages > 1 && (
+            {data && data.pagination && (
                 <div className="p-4 border-t border-slate-800 flex items-center justify-between">
                     <p className="text-xs text-slate-500">
-                        Mostrando {((page - 1) * pageSize) + 1} - {Math.min(page * pageSize, data.pagination.total)} de {data.pagination.total} productos
+                        {pageSize === -1
+                            ? `Mostrando ${data.pagination.total} productos`
+                            : `Mostrando ${((page - 1) * pageSize) + 1} - ${Math.min(page * pageSize, data.pagination.total)} de ${data.pagination.total} productos`
+                        }
                     </p>
-                    
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={() => setPage(p => Math.max(1, p - 1))}
-                            disabled={page === 1}
-                            className="p-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-slate-400 hover:text-white transition-colors"
-                        >
-                            <ChevronLeft size={16} />
-                        </button>
-                        
-                        <span className="text-sm text-slate-400 px-3">
-                            Página {page} de {data.pagination.totalPages}
-                        </span>
-                        
-                        <button
-                            onClick={() => setPage(p => Math.min(data.pagination.totalPages, p + 1))}
-                            disabled={!data.pagination.hasMore}
-                            className="p-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-slate-400 hover:text-white transition-colors"
-                        >
-                            <ChevronRight size={16} />
-                        </button>
-                    </div>
+
+                    {pageSize !== -1 && data.pagination.totalPages > 1 && (
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setPage(p => Math.max(1, p - 1))}
+                                disabled={page === 1}
+                                className="p-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-slate-400 hover:text-white transition-colors"
+                            >
+                                <ChevronLeft size={16} />
+                            </button>
+
+                            <span className="text-sm text-slate-400 px-3">
+                                Página {page} de {data.pagination.totalPages}
+                            </span>
+
+                            <button
+                                onClick={() => setPage(p => Math.min(data.pagination.totalPages, p + 1))}
+                                disabled={!data.pagination.hasMore}
+                                className="p-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-slate-400 hover:text-white transition-colors"
+                            >
+                                <ChevronRight size={16} />
+                            </button>
+                        </div>
+                    )}
                 </div>
             )}
 

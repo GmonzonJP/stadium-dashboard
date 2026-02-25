@@ -200,7 +200,7 @@ Columnas:
 - BaseCol en Transacciones = Base en Articulos (código base del producto, longitud variable)
 - Para relacionar tablas con IdArticulo (UltimaCompra, MovStockTotalResumen), usar JOIN con Articulos para obtener Base
 - Los costos tienen un factor de 1.22 (IVA incluido)
-- Margen = (Precio - Costo) / Precio * 100
+- Margen = (Precio - Costo) / Costo * 100
 - Markup = (Precio - Costo) / Costo * 100
 `;
 }

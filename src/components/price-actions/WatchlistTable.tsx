@@ -14,9 +14,11 @@ import {
 } from 'lucide-react';
 import { cn, getProductImageUrl } from '@/lib/utils';
 import { formatCurrency, formatPercent, formatNumber } from '@/lib/calculation-utils';
+import { exportToXlsx, ExportColumn } from '@/lib/export-xlsx';
 import { WatchlistProgressModal } from './WatchlistProgressModal';
 import { useFilters } from '@/context/FilterContext';
 import { ActiveFiltersTags } from '@/components/ActiveFiltersTags';
+import { ExportButton } from '@/components/ExportButton';
 import { EditablePriceCell } from '@/components/EditablePriceCell';
 import { AddToPriceQueueModal } from '@/components/AddToPriceQueueModal';
 
@@ -79,22 +81,22 @@ function ProductImage({ baseCol, descripcion }: { baseCol: string; descripcion?:
     const [hasError, setHasError] = useState(false);
     // URL de imágenes via proxy nginx
     const imageUrl = getProductImageUrl(baseCol);
-    
+
     if (hasError) {
         return (
-            <div className="w-12 h-12 bg-slate-800 rounded-lg flex items-center justify-center flex-shrink-0">
-                <ImageOff size={16} className="text-slate-600" />
+            <div className="w-20 h-20 bg-slate-800 rounded-lg flex items-center justify-center flex-shrink-0">
+                <ImageOff size={24} className="text-slate-600" />
             </div>
         );
     }
-    
+
     return (
-        <div className="w-12 h-12 bg-slate-800 rounded-lg overflow-hidden flex-shrink-0">
+        <div className="w-20 h-20 bg-white rounded-lg overflow-hidden flex-shrink-0 shadow-sm border border-slate-700">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
                 src={imageUrl}
                 alt={descripcion || baseCol}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain"
                 onError={() => setHasError(true)}
             />
         </div>
@@ -144,7 +146,8 @@ export function WatchlistTable({ onSimulatePrice }: WatchlistTableProps) {
     
     // Pagination and filtering state
     const [page, setPage] = useState(1);
-    const [pageSize] = useState(25);
+    const [pageSize, setPageSize] = useState(25);
+    const PAGE_SIZE_OPTIONS = [25, 50, 100, 200];
     const [searchQuery, setSearchQuery] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
     const [sortColumn, setSortColumn] = useState<keyof WatchlistItem>('score');
@@ -222,7 +225,7 @@ export function WatchlistTable({ onSimulatePrice }: WatchlistTableProps) {
         setError(null);
 
         try {
-            const response = await fetch(`/api/price-actions/watchlist/result/${jobId}?page=${page}&pageSize=${pageSize}`);
+            const response = await fetch(`/api/price-actions/watchlist/result/${jobId}?page=${page}&pageSize=${pageSize}&sortColumn=${sortColumn}&sortDirection=${sortDirection}`);
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
@@ -259,55 +262,33 @@ export function WatchlistTable({ onSimulatePrice }: WatchlistTableProps) {
         setIsProgressModalOpen(false);
     };
 
-    // Handle page change - fetch results with new page
+    // Handle page change, sort change, or pageSize change - fetch results with new parameters
     useEffect(() => {
         if (currentJobId && data) {
             fetchResults(currentJobId);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [page]);
+    }, [page, sortColumn, sortDirection, pageSize]);
 
-    // Handle sort (client-side for now since we have all data)
+    // Reset page when pageSize changes
+    useEffect(() => {
+        setPage(1);
+    }, [pageSize]);
+
+    // Handle sort - text columns default to ascending (A-Z), numeric columns to descending (high to low)
     const handleSort = useCallback((column: keyof WatchlistItem) => {
         if (sortColumn === column) {
             setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
         } else {
             setSortColumn(column);
-            setSortDirection('desc');
+            // Text columns default to ascending (A-Z)
+            const textColumns: (keyof WatchlistItem)[] = ['baseCol', 'categoria', 'marca'];
+            setSortDirection(textColumns.includes(column) ? 'asc' : 'desc');
         }
     }, [sortColumn]);
 
-    // Apply client-side sorting - handles numbers, strings, and arrays
-    const sortedItems = data?.items ? [...data.items].sort((a, b) => {
-        const aVal = a[sortColumn];
-        const bVal = b[sortColumn];
-        
-        // Handle null/undefined values
-        if (aVal == null && bVal == null) return 0;
-        if (aVal == null) return sortDirection === 'asc' ? 1 : -1;
-        if (bVal == null) return sortDirection === 'asc' ? -1 : 1;
-        
-        // Handle numbers
-        if (typeof aVal === 'number' && typeof bVal === 'number') {
-            return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
-        }
-        
-        // Handle strings
-        if (typeof aVal === 'string' && typeof bVal === 'string') {
-            const comparison = aVal.localeCompare(bVal, 'es', { sensitivity: 'base' });
-            return sortDirection === 'asc' ? comparison : -comparison;
-        }
-        
-        // Handle arrays (like motivo) - sort by first element
-        if (Array.isArray(aVal) && Array.isArray(bVal)) {
-            const aFirst = aVal[0] || '';
-            const bFirst = bVal[0] || '';
-            const comparison = String(aFirst).localeCompare(String(bFirst), 'es', { sensitivity: 'base' });
-            return sortDirection === 'asc' ? comparison : -comparison;
-        }
-        
-        return 0;
-    }) : [];
+    // Los items ya vienen ordenados del servidor
+    const sortedItems = data?.items || [];
 
     const getSeverityColor = (indiceRitmo: number) => {
         if (indiceRitmo < 0.6) return 'text-red-400';
@@ -576,6 +557,27 @@ export function WatchlistTable({ onSimulatePrice }: WatchlistTableProps) {
                             className="w-full pl-10 pr-4 py-2 bg-slate-900/50 border border-slate-800 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                     </div>
+                    <ExportButton
+                        onClick={() => {
+                            const items = data?.items || [];
+                            const cols: ExportColumn<WatchlistItem>[] = [
+                                { header: 'Score', accessor: r => r.score },
+                                { header: 'SKU', accessor: r => r.baseCol },
+                                { header: 'Descripción', accessor: r => r.descripcionCorta || r.descripcion },
+                                { header: 'Categoría', accessor: r => r.categoria },
+                                { header: 'Marca', accessor: r => r.marca },
+                                { header: 'Precio', accessor: r => r.precioActual },
+                                { header: 'Costo', accessor: r => r.costo },
+                                { header: 'Stock', accessor: r => r.stockTotal },
+                                { header: 'Ritmo', accessor: r => Number(r.ritmoActual.toFixed(2)) },
+                                { header: 'Índice', accessor: r => Number(r.indiceRitmo.toFixed(2)) },
+                                { header: 'Días Stock', accessor: r => r.diasStock != null ? Math.round(r.diasStock) : null },
+                                { header: 'Motivo', accessor: r => r.motivo.join(', ') },
+                            ];
+                            exportToXlsx(items, cols, 'watchlist-precios', 'Watchlist');
+                        }}
+                        disabled={!data?.items?.length}
+                    />
                 </div>
             )}
 
@@ -873,11 +875,25 @@ export function WatchlistTable({ onSimulatePrice }: WatchlistTableProps) {
                     </div>
 
                     {/* Pagination */}
-                    {data.totalPages > 1 && (
-                        <div className="px-4 py-3 border-t border-slate-800 flex items-center justify-between">
+                    <div className="px-4 py-3 border-t border-slate-800 flex items-center justify-between">
+                        <div className="flex items-center gap-4">
                             <div className="text-sm text-slate-500">
                                 Mostrando {((page - 1) * pageSize) + 1} - {Math.min(page * pageSize, data.total)} de {data.total}
                             </div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs text-slate-500">Mostrar:</span>
+                                <select
+                                    value={pageSize}
+                                    onChange={(e) => setPageSize(Number(e.target.value))}
+                                    className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                                >
+                                    {PAGE_SIZE_OPTIONS.map(size => (
+                                        <option key={size} value={size}>{size}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                        {data.totalPages > 1 && (
                             <div className="flex items-center space-x-2">
                                 <button
                                     onClick={() => setPage(p => Math.max(1, p - 1))}
@@ -907,8 +923,8 @@ export function WatchlistTable({ onSimulatePrice }: WatchlistTableProps) {
                                     <ChevronRight size={18} />
                                 </button>
                             </div>
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </div>
             )}
 

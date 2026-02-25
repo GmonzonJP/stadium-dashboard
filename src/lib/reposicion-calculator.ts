@@ -224,13 +224,18 @@ export async function calculateReposicionSemaphore(
 /**
  * Calcula el semáforo de forma simplificada cuando ya tenemos los datos
  * (evita hacer queries adicionales)
+ *
+ * @param ritmoDiarioOverride - Si se provee, usa este ritmo en vez de calcular
+ *   desde unidadesVentana/ventana. Esto permite usar la misma velocidad que
+ *   Par/Día (basada en ventas desde última compra) para evitar inconsistencias
+ *   con productos estacionales o de aceleración reciente.
  */
 export function calculateSemaphoreFromData(
     stockTotal: number | null,
     unidadesVentana: number,
     diasDesdeCompra: number,
     ultimaCompraFecha: string | null,
-    config?: Partial<ReposicionConfig>
+    config?: Partial<ReposicionConfig> & { ritmoDiarioOverride?: number }
 ): ReposicionResult {
     const ventanaRitmoDias = config?.ventanaRitmoDias ?? reposicionConfig.default.ventanaRitmoDias;
     const umbralReposicionDias = config?.umbralReposicionDias ?? reposicionConfig.default.umbralReposicionDias;
@@ -256,8 +261,8 @@ export function calculateSemaphoreFromData(
         };
     }
 
-    // Sin ventas
-    if (unidadesVentana <= 0) {
+    // Sin ventas (solo si no hay override)
+    if (unidadesVentana <= 0 && !config?.ritmoDiarioOverride) {
         return {
             ...baseResult,
             color: 'white',
@@ -269,7 +274,21 @@ export function calculateSemaphoreFromData(
         };
     }
 
-    const ritmoDiario = unidadesVentana / ventanaRitmoDias;
+    // Usar ritmo override (desde última compra) si está disponible, sino calcular desde ventana
+    const ritmoDiario = config?.ritmoDiarioOverride ?? (unidadesVentana / ventanaRitmoDias);
+
+    if (ritmoDiario <= 0) {
+        return {
+            ...baseResult,
+            color: 'white',
+            diasReales: null,
+            diasEsperados: ventanaRitmoDias - diasDesdeCompra,
+            ritmoDiario: 0,
+            unidades180: unidadesVentana,
+            explanation: 'Sin ventas suficientes para estimar ritmo.'
+        };
+    }
+
     const diasReales = stockTotal / ritmoDiario;
     const diasEsperados = ventanaRitmoDias - diasDesdeCompra;
 

@@ -61,13 +61,18 @@ export async function POST(req: NextRequest) {
         CAST(SUM(CAST(T.Cantidad as decimal(18,2)) * (1.22 * ISNULL(UC.ultimoCosto, 0))) as decimal(18,2)) as costoVenta,
         CAST(SUM(T.PRECIO) - SUM(CAST(T.Cantidad as decimal(18,2)) * (1.22 * ISNULL(UC.ultimoCosto, 0))) as decimal(18,2)) as margenBruto, 
         CAST(((SUM(T.PRECIO) / NULLIF(SUM(CAST(T.Cantidad as decimal(18,2)) * (1.22 * ISNULL(UC.ultimoCosto, 0))), 0)) - 1) * 100 as decimal(18,2)) as margen, 
-        COALESCE(MAX(aPR.Precio), MAX(T.PRECIO / NULLIF(T.Cantidad, 0))) as precioUnitarioLista,
+        COALESCE(MAX(ART_PVP.PVP), MAX(T.PRECIO / NULLIF(T.Cantidad, 0))) as precioUnitarioLista,
         CAST(ISNULL(MAX(STK.stock), 0) / NULLIF((CAST(SUM(T.Cantidad) as decimal(18,2)) / NULLIF(${diffDays}, 0)), 0) as decimal(18,0)) as diasStock
       FROM Transacciones T
       INNER JOIN ArticulosBase AR ON AR.BaseCol = T.BaseCol
       LEFT JOIN UltimaCompraBase UC ON UC.BaseCol = T.BaseCol
       LEFT JOIN StockBase STK ON STK.BaseCol = T.BaseCol
-      LEFT JOIN ArticuloPrecio aPR ON aPR.baseCol = T.BaseCol
+      LEFT JOIN (
+        SELECT Base as BaseCol, MAX(PrecioLista) as PVP
+        FROM Articulos
+        WHERE PrecioLista > 0
+        GROUP BY Base
+      ) ART_PVP ON ART_PVP.BaseCol = T.BaseCol
       {WHERE}
       GROUP BY T.IdGenero, T.DescripcionGenero, T.BaseCol, AR.descripcionCorta, T.IdMarca, T.DescripcionMarca
       HAVING SUM(T.Cantidad) > 0

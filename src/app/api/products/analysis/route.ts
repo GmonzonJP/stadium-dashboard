@@ -15,15 +15,54 @@ import {
 import { calculateSemaphoreFromData, getReposicionConfig } from '@/lib/reposicion-calculator';
 
 // Pagination defaults
-const DEFAULT_PAGE_SIZE = 50;
-const MAX_PAGE_SIZE = 200;
+const DEFAULT_PAGE_SIZE = 100;
+const MAX_PAGE_SIZE = 10000; // Effectively unlimited when "Todos" is selected
+
+// Columnas válidas para ordenamiento
+type SortColumn =
+    | 'articulo'
+    | 'unidades_vendidas'
+    | 'stock_total'
+    | 'ultimo_costo'
+    | 'pvp'
+    | 'precio_promedio_asp'
+    | 'venta_total'
+    | 'margen'
+    | 'markup'
+    | 'ultima_compra'
+    | 'dias_stock'
+    | 'pares_por_dia'
+    | 'semaforo';
+
+// Mapeo de columnas para SQL
+const SORT_COLUMN_MAP: Record<SortColumn, string> = {
+    articulo: 'DescripcionMarca',
+    unidades_vendidas: 'unidades_vendidas',
+    stock_total: 'stock_total', // Se ordena después de combinar con stock
+    ultimo_costo: 'ultimo_costo',
+    pvp: 'pvp',
+    precio_promedio_asp: 'precio_promedio_asp',
+    venta_total: 'venta_total',
+    margen: 'margen', // Se calcula después
+    markup: 'markup', // Se calcula después
+    ultima_compra: 'ultima_compra_fecha',
+    dias_stock: 'dias_stock', // Se calcula después
+    pares_por_dia: 'pares_por_dia', // Se calcula después
+    semaforo: 'semaforo' // Se calcula después
+};
 
 export async function POST(req: NextRequest) {
     try {
         const body = await req.json();
         const filters: FilterParams = body;
         const page = Math.max(1, Number(body.page) || 1);
-        const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(body.pageSize) || DEFAULT_PAGE_SIZE));
+        // -1 means "all" - use MAX_PAGE_SIZE to get all products
+        const requestedPageSize = Number(body.pageSize) || DEFAULT_PAGE_SIZE;
+        const pageSize = requestedPageSize === -1 ? MAX_PAGE_SIZE : Math.min(MAX_PAGE_SIZE, Math.max(1, requestedPageSize));
+
+        // Parámetros de ordenamiento
+        const sortColumn = (body.sortColumn as SortColumn) || 'venta_total';
+        const sortDirection = body.sortDirection === 'asc' ? 'asc' : 'desc';
 
         if (!filters.startDate || !filters.endDate) {
             return NextResponse.json({ error: 'Missing date range' }, { status: 400 });
@@ -102,13 +141,12 @@ export async function POST(req: NextRequest) {
                 FROM Articulos
                 GROUP BY Base
             ),
-            -- CTE 6: Precios de lista
-            PreciosLista AS (
-                SELECT
-                    baseCol as BaseCol,
-                    MAX(Precio) as Precio
-                FROM ArticuloPrecio
-                GROUP BY baseCol
+            -- NOTA: PVP ahora se calcula con subquery correlacionada en SELECT
+            -- El baseCol en ArticuloPrecio puede ser más corto que el producto
+            -- Ej: producto = 146.S21121000, ArticuloPrecio.baseCol = 146.S2112
+            -- Se busca WHERE T.BaseCol LIKE baseCol + '%' ORDER BY LEN(baseCol) DESC
+            ArticulosDummy AS (
+                SELECT 1 as dummy
             )
             SELECT
                 T.BaseCol,
@@ -127,10 +165,13 @@ export async function POST(req: NextRequest) {
                     THEN CAST(SUM(T.Precio) / SUM(T.Cantidad) as decimal(18,2))
                     ELSE NULL
                 END as precio_promedio_asp,
-                -- Último costo (con IVA)
-                MAX(UC.ultimoCosto) * 1.22 as ultimo_costo,
-                -- PVP (precio de lista o último precio de venta si no hay lista)
-                COALESCE(MAX(AP.Precio), MAX(T.PRECIO / NULLIF(T.Cantidad, 0))) as pvp,
+                -- Último costo (UltimoCosto ya incluye IVA)
+                MAX(UC.ultimoCosto) as ultimo_costo,
+                -- PVP (PrecioLista de Articulos, o último precio de venta si no hay lista)
+                COALESCE(
+                    MAX(ART_PVP.PVP),
+                    MAX(T.PRECIO / NULLIF(T.Cantidad, 0))
+                ) as pvp,
                 -- Última compra (fecha)
                 MAX(UC.FechaUltimaCompra) as ultima_compra_fecha,
                 -- Cantidad última compra
@@ -142,7 +183,12 @@ export async function POST(req: NextRequest) {
             FROM Transacciones T
             LEFT JOIN ArticulosBase AR ON AR.Base = T.BaseCol
             LEFT JOIN UltimaCompraBase UC ON UC.BaseCol = T.BaseCol
-            LEFT JOIN PreciosLista AP ON AP.BaseCol = T.BaseCol
+            LEFT JOIN (
+                SELECT Base as BaseCol, MAX(PrecioLista) as PVP
+                FROM Articulos
+                WHERE PrecioLista > 0
+                GROUP BY Base
+            ) ART_PVP ON ART_PVP.BaseCol = T.BaseCol
             LEFT JOIN VentasVentana VV ON VV.BaseCol = T.BaseCol
             LEFT JOIN Ventas180 V180 ON V180.BaseCol = T.BaseCol
             LEFT JOIN VentasDesdeCompra VDC ON VDC.BaseCol = T.BaseCol
@@ -166,7 +212,8 @@ export async function POST(req: NextRequest) {
         `;
 
         const analysisQuery = buildDashboardQuery(analysisSQL, filters, {
-            tableAlias: 'T'
+            tableAlias: 'T',
+            searchColumns: ['T.BaseCol', 'T.DescripcionMarca', 'T.DescripcionArticulo']
         });
 
         // Aplicar filtros de marca al stock si existen
@@ -194,16 +241,9 @@ export async function POST(req: NextRequest) {
             });
         });
 
-        // Calcular totales para paginación
-        const totalProducts = analysisResult.recordset.length;
-        const totalPages = Math.ceil(totalProducts / pageSize);
-        const offset = (page - 1) * pageSize;
-
-        // Paginar resultados
-        const paginatedRecords = analysisResult.recordset.slice(offset, offset + pageSize);
-
-        // Combinar datos y calcular métricas adicionales
-        const products = paginatedRecords.map((row: any) => {
+        // Primero procesamos TODOS los registros para calcular métricas
+        // Luego ordenamos y finalmente paginamos
+        const allProducts = analysisResult.recordset.map((row: any) => {
             const stock = stockMap.get(row.BaseCol) || { stock_total: 0, stock_pendiente: 0, stock_on_hand: 0 };
             const unidades = toNumber(row.unidades_vendidas) || 0;
             const ventaTotal = toNumber(row.venta_total) || 0;
@@ -234,13 +274,16 @@ export async function POST(req: NextRequest) {
             const sellThrough = calculateSellThrough(unidades, stock.stock_total);
 
             // Calcular semáforo de reposición
+            // Usar paresPorDia (velocidad desde última compra) como override para
+            // consistencia con Días Stock y Par/Día mostrados en la tabla.
+            // Fallback a velocidad de ventana 180d si paresPorDia no está disponible.
             const semaphore = ultimaCompraFecha
                 ? calculateSemaphoreFromData(
                     stock.stock_total,
                     unidadesVentana,
                     diasDesdeCompra,
                     ultimaCompraFecha,
-                    { ventanaRitmoDias }
+                    { ventanaRitmoDias, ritmoDiarioOverride: paresPorDia ?? undefined }
                 )
                 : {
                     color: 'white' as const,
@@ -297,8 +340,113 @@ export async function POST(req: NextRequest) {
             };
         });
 
+        // Ordenar TODOS los productos antes de paginar
+        const sortedProducts = [...allProducts].sort((a, b) => {
+            let aVal: any;
+            let bVal: any;
+
+            switch (sortColumn) {
+                case 'articulo':
+                    // Ordenar por código de artículo (BaseCol)
+                    aVal = (a.BaseCol || '').toLowerCase();
+                    bVal = (b.BaseCol || '').toLowerCase();
+                    break;
+                case 'unidades_vendidas':
+                    aVal = a.unidades_vendidas;
+                    bVal = b.unidades_vendidas;
+                    break;
+                case 'stock_total':
+                    aVal = a.stock_total;
+                    bVal = b.stock_total;
+                    break;
+                case 'ultimo_costo':
+                    aVal = a.ultimo_costo || 0;
+                    bVal = b.ultimo_costo || 0;
+                    break;
+                case 'pvp':
+                    aVal = a.pvp || 0;
+                    bVal = b.pvp || 0;
+                    break;
+                case 'precio_promedio_asp':
+                    aVal = a.precio_promedio_asp || 0;
+                    bVal = b.precio_promedio_asp || 0;
+                    break;
+                case 'venta_total':
+                    aVal = a.venta_total;
+                    bVal = b.venta_total;
+                    break;
+                case 'margen':
+                    aVal = a.margen || 0;
+                    bVal = b.margen || 0;
+                    break;
+                case 'markup':
+                    aVal = a.markup || 0;
+                    bVal = b.markup || 0;
+                    break;
+                case 'ultima_compra':
+                    aVal = a.ultima_compra_fecha ? new Date(a.ultima_compra_fecha).getTime() : 0;
+                    bVal = b.ultima_compra_fecha ? new Date(b.ultima_compra_fecha).getTime() : 0;
+                    break;
+                case 'dias_stock':
+                    aVal = a.dias_stock || 999999;
+                    bVal = b.dias_stock || 999999;
+                    break;
+                case 'pares_por_dia':
+                    aVal = a.pares_por_dia || 0;
+                    bVal = b.pares_por_dia || 0;
+                    break;
+                case 'semaforo':
+                    const order: Record<string, number> = { red: 1, green: 2, black: 3, white: 4 };
+                    aVal = order[a.semaforo.color] || 5;
+                    bVal = order[b.semaforo.color] || 5;
+                    break;
+                default:
+                    aVal = a.venta_total;
+                    bVal = b.venta_total;
+            }
+
+            if (typeof aVal === 'string' && typeof bVal === 'string') {
+                return sortDirection === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+            }
+            return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+        });
+
+        // Calcular totales sobre TODOS los productos filtrados (antes de paginar)
+        const totals = {
+            unidades_vendidas: 0,
+            stock_total: 0,
+            stock_pendiente: 0,
+            venta_total: 0,
+            cantidad_ultima_compra: 0,
+        };
+        for (const p of sortedProducts) {
+            totals.unidades_vendidas += p.unidades_vendidas;
+            totals.stock_total += p.stock_total;
+            totals.stock_pendiente += p.stock_pendiente;
+            totals.venta_total += p.venta_total;
+            totals.cantidad_ultima_compra += p.cantidad_ultima_compra || 0;
+        }
+
+        // Calcular paginación sobre el dataset ordenado
+        const totalProducts = sortedProducts.length;
+        const totalPages = Math.ceil(totalProducts / pageSize);
+        const offset = (page - 1) * pageSize;
+        const products = sortedProducts.slice(offset, offset + pageSize);
+
         return NextResponse.json({
             products,
+            totals: {
+                ...totals,
+                venta_total: Math.round(totals.venta_total),
+                asp: totals.unidades_vendidas > 0 ? Math.round(totals.venta_total / totals.unidades_vendidas) : null,
+                margen_promedio: totals.venta_total > 0
+                    ? Math.round(sortedProducts.reduce((acc, p) => acc + (p.margen || 0) * p.venta_total, 0) / totals.venta_total * 100) / 100
+                    : null,
+                sell_through: totals.cantidad_ultima_compra > 0
+                    ? Math.round((totals.unidades_vendidas / totals.cantidad_ultima_compra) * 10000) / 100
+                    : null,
+                productos_count: totalProducts,
+            },
             pagination: {
                 page,
                 pageSize,
@@ -306,13 +454,17 @@ export async function POST(req: NextRequest) {
                 totalPages,
                 hasMore: page < totalPages
             },
+            sorting: {
+                column: sortColumn,
+                direction: sortDirection
+            },
             duration_days: durationDays,
             ventana_clasificacion_dias: VENTANA_CLASIFICACION_DIAS,
             ventana_semaforo_dias: ventanaRitmoDias,
             meta: {
                 stockSource: 'MovStockTotalResumen',
                 aspFormula: 'venta_total / unidades',
-                margenFormula: '(precio - costo) / precio * 100',
+                margenFormula: '(precio - costo) / costo * 100',
                 markupFormula: '(precio - costo) / costo * 100',
                 clasificacionNota: 'Días Stock y Pares/Día calculados desde última compra (o 180 días si no hay compra)'
             }

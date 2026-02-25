@@ -29,6 +29,7 @@ export function FilterProvider({ children }: { children: React.ReactNode }) {
         stores: [],
         brands: [],
         categories: [],
+        sections: [],
         genders: [],
         suppliers: []
     });
@@ -39,6 +40,7 @@ export function FilterProvider({ children }: { children: React.ReactNode }) {
         stores: [],
         brands: [],
         categories: [],
+        sections: [],
         genders: [],
         suppliers: []
     });
@@ -71,12 +73,25 @@ export function FilterProvider({ children }: { children: React.ReactNode }) {
 
     useEffect(() => {
         fetch('/api/filters')
-            .then(res => res.json())
+            .then(res => {
+                if (!res.ok) throw new Error(`Filters API returned ${res.status}`);
+                return res.json();
+            })
             .then(data => {
-                setFilterData(data);
+                setFilterData(prev => ({
+                    stores: Array.isArray(data.stores) ? data.stores : prev.stores,
+                    brands: Array.isArray(data.brands) ? data.brands : prev.brands,
+                    categories: Array.isArray(data.categories) ? data.categories : prev.categories,
+                    sections: Array.isArray(data.sections) ? data.sections : prev.sections,
+                    genders: Array.isArray(data.genders) ? data.genders : prev.genders,
+                    suppliers: Array.isArray(data.suppliers) ? data.suppliers : prev.suppliers,
+                }));
                 setIsLoading(false);
             })
-            .catch(err => console.error('Error loading filters:', err));
+            .catch(err => {
+                console.error('Error loading filters:', err);
+                setIsLoading(false);
+            });
     }, []);
 
     const toggleFilter = (category: keyof FilterParams, id: number) => {

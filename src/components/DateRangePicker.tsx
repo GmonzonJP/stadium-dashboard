@@ -19,6 +19,29 @@ const formatDateLocal = (date: Date): string => {
     return `${year}-${month}-${day}`;
 };
 
+// Generar temporadas (AW = Autumn/Winter: Mar-Aug, SS = Spring/Summer: Sep-Feb)
+function getSeasonPresets(): { label: string; startDate: Date; endDate: Date }[] {
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const seasons: { label: string; startDate: Date; endDate: Date }[] = [];
+
+    for (let year = currentYear; year >= currentYear - 1; year--) {
+        seasons.push({
+            label: `AW${String(year).slice(-2)}`,
+            startDate: new Date(year, 2, 1),
+            endDate: new Date(year, 7, 31)
+        });
+        seasons.push({
+            label: `SS${String(year).slice(-2)}`,
+            startDate: new Date(year - 1, 8, 1),
+            endDate: new Date(year, 1, 28)
+        });
+    }
+
+    seasons.sort((a, b) => b.startDate.getTime() - a.startDate.getTime());
+    return seasons.slice(0, 4);
+}
+
 export function DateRangePicker() {
     const { selectedFilters, setSelectedFilters } = useFilters();
     const [isOpen, setIsOpen] = useState(false);
@@ -49,7 +72,7 @@ export function DateRangePicker() {
                 break;
             case 'Este Mes':
                 start = new Date(year, today.getMonth(), 1);
-                end = new Date(year, today.getMonth() + 1, 0);
+                end = today;
                 break;
             case 'Mes Pasado':
                 start = new Date(year, today.getMonth() - 1, 1);
@@ -74,6 +97,16 @@ export function DateRangePicker() {
             case 'Fechas Especificas':
                 setShowCustomRange(true);
                 return; // Don't apply yet
+            default: {
+                // Check if it's a season preset (AW/SS)
+                const seasons = getSeasonPresets();
+                const season = seasons.find(s => s.label === preset);
+                if (season) {
+                    start = season.startDate;
+                    end = season.endDate;
+                }
+                break;
+            }
         }
 
         if (preset !== 'Fechas Especificas') {
@@ -134,7 +167,29 @@ export function DateRangePicker() {
                         >
                             {!showCustomRange ? (
                                 <div className="py-1">
-                                    {['Hoy', 'Ayer', 'Ultimos 7 Dias', 'Ultimos 90 Dias', 'Este Mes', 'Mes Pasado', 'Q1', 'Q2', 'Q3', 'Q4'].map((preset) => (
+                                    {['Hoy', 'Ayer', 'Ultimos 7 Dias', 'Ultimos 90 Dias', 'Este Mes', 'Mes Pasado'].map((preset) => (
+                                        <button
+                                            key={preset}
+                                            onClick={() => applyPreset(preset)}
+                                            className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                                        >
+                                            {preset}
+                                        </button>
+                                    ))}
+                                    <div className="h-px bg-slate-800 my-1" />
+                                    <div className="px-4 py-1 text-[10px] text-slate-600 uppercase font-bold">Temporadas</div>
+                                    {getSeasonPresets().map((season) => (
+                                        <button
+                                            key={season.label}
+                                            onClick={() => applyPreset(season.label)}
+                                            className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                                        >
+                                            {season.label}
+                                        </button>
+                                    ))}
+                                    <div className="h-px bg-slate-800 my-1" />
+                                    <div className="px-4 py-1 text-[10px] text-slate-600 uppercase font-bold">Trimestres</div>
+                                    {['Q1', 'Q2', 'Q3', 'Q4'].map((preset) => (
                                         <button
                                             key={preset}
                                             onClick={() => applyPreset(preset)}

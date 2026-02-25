@@ -18,10 +18,22 @@ export interface FilterItem {
     label: string;
 }
 
+export interface CategoryItem extends FilterItem {
+    sectionId: number;
+    sectionLabel: string;
+}
+
+export interface SectionItem {
+    id: number;
+    label: string;
+    categories: CategoryItem[];
+}
+
 export interface FilterData {
     stores: FilterItem[];
     brands: FilterItem[];
     categories: FilterItem[];
+    sections: SectionItem[];
     genders: FilterItem[];
     suppliers: FilterItem[];
 }
@@ -34,6 +46,7 @@ export interface FilterParams {
     stores?: number[];
     brands?: number[];
     categories?: number[];
+    sections?: number[];
     genders?: number[];
     suppliers?: number[];
     search?: string;

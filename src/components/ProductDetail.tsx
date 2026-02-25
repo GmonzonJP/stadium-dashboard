@@ -1,8 +1,13 @@
 'use client';
 
 import React, { useEffect, useState, useMemo } from 'react';
+import DatePicker from 'react-datepicker';
+import { registerLocale } from 'react-datepicker';
+import { es } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ArrowLeft, Store, Calendar, Package, ChevronDown } from 'lucide-react';
+
+registerLocale('es', es);
 import { cn, getProductImageUrl } from '@/lib/utils';
 import { TallaGaussianOverlayChart } from './TallaGaussianOverlayChart';
 import { ProductInsights } from './ProductInsights';
@@ -22,6 +27,44 @@ const formatDateLocal = (date: Date): string => {
     return `${year}-${month}-${day}`;
 };
 
+// Generar temporadas (AW = Autumn/Winter: Mar-Aug, SS = Spring/Summer: Sep-Feb)
+interface SeasonPreset {
+    label: string;
+    startDate: Date;
+    endDate: Date;
+}
+
+function getSeasonPresets(): SeasonPreset[] {
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const currentMonth = today.getMonth() + 1; // 1-12
+
+    const seasons: SeasonPreset[] = [];
+
+    // Generar temporadas para los últimos 2 años
+    for (let year = currentYear; year >= currentYear - 1; year--) {
+        // AW (Autumn/Winter): Mar - Aug del año
+        seasons.push({
+            label: `AW${String(year).slice(-2)}`,
+            startDate: new Date(year, 2, 1), // Mar 1
+            endDate: new Date(year, 7, 31) // Aug 31
+        });
+
+        // SS (Spring/Summer): Sep del año anterior - Feb del año
+        seasons.push({
+            label: `SS${String(year).slice(-2)}`,
+            startDate: new Date(year - 1, 8, 1), // Sep 1 del año anterior
+            endDate: new Date(year, 1, 28) // Feb 28
+        });
+    }
+
+    // Ordenar por fecha más reciente primero
+    seasons.sort((a, b) => b.startDate.getTime() - a.startDate.getTime());
+
+    // Retornar solo las últimas 4
+    return seasons.slice(0, 4);
+}
+
 interface ProductDetailProps {
     productId: string | null;
     onClose: () => void;
@@ -38,6 +81,9 @@ export function ProductDetail({ productId, onClose, initialStartDate, initialEnd
     const [startDate, setStartDate] = useState<string>(initialStartDate || '');
     const [endDate, setEndDate] = useState<string>(initialEndDate || '');
     const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+    const [showCustomRange, setShowCustomRange] = useState(false);
+    const [tempStart, setTempStart] = useState('');
+    const [tempEnd, setTempEnd] = useState('');
 
     // Current displayed product
     const currentProductId = selectedColor || productId;
@@ -98,6 +144,16 @@ export function ProductDetail({ productId, onClose, initialStartDate, initialEnd
         setStartDate(formatDateLocal(start));
         setEndDate(formatDateLocal(end));
         setIsDatePickerOpen(false);
+        setShowCustomRange(false);
+    };
+
+    const handleApplyCustomRange = () => {
+        if (tempStart && tempEnd) {
+            setStartDate(tempStart);
+            setEndDate(tempEnd);
+            setIsDatePickerOpen(false);
+            setShowCustomRange(false);
+        }
     };
 
     useEffect(() => {
@@ -160,19 +216,22 @@ export function ProductDetail({ productId, onClose, initialStartDate, initialEnd
 
         for (const storeId of storeIds) {
             const nombre = data.storesInfo?.[storeId] || `Tienda ${storeId}`;
-            const tallasData: Record<string, { stock: number; ventas: number }> = {};
+            const tallasData: Record<string, { stock: number; pendiente: number; ventas: number }> = {};
             let totalStock = 0;
+            let totalPendiente = 0;
             let totalVentas = 0;
 
             for (const t of data.tallasData) {
                 const matrixRow = data.matrixData.find((r: any) => r.talla === t.talla);
                 const cell = matrixRow?.[`store_${storeId}`];
                 const stock = cell?.stock || 0;
+                const pendiente = cell?.pendiente || 0;
                 // Get sales from matrixData cell (already includes ventas)
                 const ventas = cell?.ventas || 0;
 
-                tallasData[t.talla] = { stock, ventas };
+                tallasData[t.talla] = { stock, pendiente, ventas };
                 totalStock += stock;
+                totalPendiente += pendiente;
                 totalVentas += ventas;
             }
 
@@ -181,6 +240,7 @@ export function ProductDetail({ productId, onClose, initialStartDate, initialEnd
                 nombre,
                 tallas: tallasData,
                 totalStock,
+                totalPendiente,
                 totalVentas,
             });
         }
@@ -254,8 +314,11 @@ export function ProductDetail({ productId, onClose, initialStartDate, initialEnd
                                 <div>
                                     <div className="flex items-center gap-3">
                                         <span className="text-sm text-slate-500 dark:text-slate-400 font-mono">{data?.BaseCol || currentProductId}</span>
-                                        <span className="text-lg font-bold text-blue-600 dark:text-blue-400">{data?.DescripcionMarca || 'N/A'}</span>
+                                        <span className="text-xl font-bold text-blue-600 dark:text-blue-400">{data?.DescripcionMarca || 'N/A'}</span>
                                     </div>
+                                    <p className="text-base text-slate-700 dark:text-slate-300 font-medium mt-1 max-w-2xl">
+                                        {data?.descripcionCorta || data?.Descripcion || ''}
+                                    </p>
                                 </div>
                             </div>
 
@@ -288,9 +351,32 @@ export function ProductDetail({ productId, onClose, initialStartDate, initialEnd
                                                     initial={{ opacity: 0, y: 10, scale: 0.95 }}
                                                     animate={{ opacity: 1, y: 0, scale: 1 }}
                                                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                                    className="absolute right-0 top-full mt-2 w-56 bg-[#020617] border border-slate-800 rounded-xl shadow-2xl z-[630] py-1"
+                                                    className="absolute right-0 top-full mt-2 w-64 bg-[#020617] border border-slate-800 rounded-xl shadow-2xl z-[630] py-1 max-h-[400px] overflow-y-auto custom-scrollbar"
                                                 >
-                                                    {['Hoy', 'Ayer', 'Ultimos 7 Dias', 'Ultimos 90 Dias', 'Este Mes', 'Mes Pasado', 'Q1', 'Q2', 'Q3', 'Q4'].map((preset) => (
+                                                    {!showCustomRange ? (
+                                                    <>
+                                                    {/* Temporadas */}
+                                                    <div className="px-4 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Temporadas</div>
+                                                    {getSeasonPresets().map((season) => (
+                                                        <button
+                                                            key={season.label}
+                                                            onClick={() => {
+                                                                setStartDate(formatDateLocal(season.startDate));
+                                                                setEndDate(formatDateLocal(season.endDate));
+                                                                setIsDatePickerOpen(false);
+                                                            }}
+                                                            className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-slate-800 hover:text-white transition-colors flex justify-between items-center"
+                                                        >
+                                                            <span className="font-medium">{season.label}</span>
+                                                            <span className="text-xs text-slate-500">
+                                                                {season.startDate.toLocaleDateString('es-ES', { month: 'short', year: '2-digit' })} - {season.endDate.toLocaleDateString('es-ES', { month: 'short', year: '2-digit' })}
+                                                            </span>
+                                                        </button>
+                                                    ))}
+                                                    <div className="h-px bg-slate-800 my-1" />
+                                                    {/* Períodos rápidos */}
+                                                    <div className="px-4 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Períodos</div>
+                                                    {['Hoy', 'Ayer', 'Ultimos 7 Dias', 'Ultimos 90 Dias', 'Este Mes', 'Mes Pasado'].map((preset) => (
                                                         <button
                                                             key={preset}
                                                             onClick={() => applyDatePreset(preset)}
@@ -299,6 +385,30 @@ export function ProductDetail({ productId, onClose, initialStartDate, initialEnd
                                                             {preset}
                                                         </button>
                                                     ))}
+                                                    <div className="h-px bg-slate-800 my-1" />
+                                                    {/* Trimestres */}
+                                                    <div className="px-4 py-1 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Trimestres</div>
+                                                    {['Q1', 'Q2', 'Q3', 'Q4'].map((preset) => (
+                                                        <button
+                                                            key={preset}
+                                                            onClick={() => applyDatePreset(preset)}
+                                                            className="w-full text-left px-4 py-2 text-sm text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                                                        >
+                                                            {preset}
+                                                        </button>
+                                                    ))}
+                                                    <div className="h-px bg-slate-800 my-1" />
+                                                    {/* Fechas Específicas */}
+                                                    <button
+                                                        onClick={() => {
+                                                            setTempStart(startDate);
+                                                            setTempEnd(endDate);
+                                                            setShowCustomRange(true);
+                                                        }}
+                                                        className="w-full text-left px-4 py-2 text-sm text-blue-400 hover:bg-slate-800 hover:text-blue-300 transition-colors font-medium"
+                                                    >
+                                                        Fechas Específicas...
+                                                    </button>
                                                     {(startDate || endDate) && (
                                                         <>
                                                             <div className="h-px bg-slate-800 my-1" />
@@ -309,6 +419,63 @@ export function ProductDetail({ productId, onClose, initialStartDate, initialEnd
                                                                 Limpiar filtro
                                                             </button>
                                                         </>
+                                                    )}
+                                                    </>
+                                                    ) : (
+                                                    /* Custom date range inputs */
+                                                    <div className="p-4 space-y-3">
+                                                        <button
+                                                            onClick={() => setShowCustomRange(false)}
+                                                            className="text-xs text-slate-500 hover:text-white mb-2 flex items-center"
+                                                        >
+                                                            <ChevronDown className="rotate-90 mr-1" size={12} /> Volver
+                                                        </button>
+                                                        <div>
+                                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Desde</label>
+                                                            <DatePicker
+                                                                selected={tempStart ? new Date(tempStart + 'T00:00:00') : null}
+                                                                onChange={(date: Date | null) => setTempStart(date ? formatDateLocal(date) : '')}
+                                                                locale="es"
+                                                                dateFormat="dd/MM/yyyy"
+                                                                maxDate={tempEnd ? new Date(tempEnd + 'T00:00:00') : undefined}
+                                                                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500/50"
+                                                                calendarClassName="dark-calendar"
+                                                                popperPlacement="bottom-start"
+                                                                showPopperArrow={false}
+                                                                portalId="datepicker-portal"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Hasta</label>
+                                                            <DatePicker
+                                                                selected={tempEnd ? new Date(tempEnd + 'T00:00:00') : null}
+                                                                onChange={(date: Date | null) => setTempEnd(date ? formatDateLocal(date) : '')}
+                                                                locale="es"
+                                                                dateFormat="dd/MM/yyyy"
+                                                                minDate={tempStart ? new Date(tempStart + 'T00:00:00') : undefined}
+                                                                className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1.5 text-sm text-white focus:outline-none focus:border-blue-500/50"
+                                                                calendarClassName="dark-calendar"
+                                                                popperPlacement="bottom-start"
+                                                                showPopperArrow={false}
+                                                                portalId="datepicker-portal"
+                                                            />
+                                                        </div>
+                                                        <div className="pt-2 flex gap-2">
+                                                            <button
+                                                                onClick={handleApplyCustomRange}
+                                                                disabled={!tempStart || !tempEnd}
+                                                                className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 disabled:text-slate-600 text-white text-xs font-bold py-1.5 rounded transition-colors"
+                                                            >
+                                                                Filtrar
+                                                            </button>
+                                                            <button
+                                                                onClick={() => { setTempStart(''); setTempEnd(''); }}
+                                                                className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold py-1.5 rounded transition-colors"
+                                                            >
+                                                                Limpiar
+                                                            </button>
+                                                        </div>
+                                                    </div>
                                                     )}
                                                 </motion.div>
                                             </>
@@ -336,11 +503,11 @@ export function ProductDetail({ productId, onClose, initialStartDate, initialEnd
                                     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6">
                                         {/* Left Column: Image + Color Variants + Top Tiendas */}
                                         <div className="lg:col-span-3 space-y-4">
-                                            <div className="bg-slate-50 dark:bg-slate-800 rounded-2xl p-4 flex items-center justify-center min-h-[220px]">
+                                            <div className="bg-slate-50 dark:bg-slate-800 rounded-2xl p-6 flex items-center justify-center min-h-[400px]">
                                                 <img
                                                     src={getProductImageUrl(data?.BaseCol || currentProductId)}
                                                     alt={data?.descripcionCorta || currentProductId}
-                                                    className="max-w-full max-h-[200px] object-contain"
+                                                    className="max-w-full max-h-[380px] object-contain"
                                                     onError={(e) => {
                                                         e.currentTarget.src = 'https://placehold.co/400x400/e5e7eb/9ca3af?text=Sin+Imagen';
                                                     }}
@@ -425,8 +592,8 @@ export function ProductDetail({ productId, onClose, initialStartDate, initialEnd
                                                 ritmoVenta={data?.ritmoDiario || clasificacion?.paresPorDia || null}
                                                 diasStock={data?.diasStock || null}
                                                 stock={data?.stock || 0}
-                                                margenBruto={data?.margen || null}
-                                                costo={(data?.ultimoCosto || 0) * 1.22}
+                                                margen={data?.margen || null}
+                                                costo={data?.ultimoCosto || 0}
                                                 pvp={data?.pvp || data?.precioVenta || 0}
                                                 unidadesVendidas={data?.unidadesVendidasDesdeUltCompra || 0}
                                                 unidadesCompradas={data?.unidadesCompradas || 0}
@@ -437,7 +604,7 @@ export function ProductDetail({ productId, onClose, initialStartDate, initialEnd
                                                 ventasImporte={data?.importeVentaDesdeUltCompra || 0}
                                                 utilidadVenta={
                                                     data?.importeVentaDesdeUltCompra && data?.ultimoCosto
-                                                        ? data.importeVentaDesdeUltCompra - (data.unidadesVendidasDesdeUltCompra * data.ultimoCosto * 1.22)
+                                                        ? data.importeVentaDesdeUltCompra - (data.unidadesVendidasDesdeUltCompra * data.ultimoCosto)
                                                         : undefined
                                                 }
                                             />

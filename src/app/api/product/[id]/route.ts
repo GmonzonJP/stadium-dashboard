@@ -135,19 +135,17 @@ export async function GET(
         : '';
 
     try {
-        // Get basic product info from transacciones
-        // Primero obtenemos el PVP de ArticuloPrecio de forma independiente
-        // Nota: ArticuloPrecio puede tener baseCol más corto (ej: 146.S2112)
-        // mientras Transacciones tiene el código completo (ej: 146.S21120064)
-        // Por eso buscamos coincidencia exacta O que el articulo empiece con el baseCol de ArticuloPrecio
+        // Get PVP from Articulos.PrecioLista
         const pvpQuery = `
-            SELECT MAX(Precio) as pvp
-            FROM ArticuloPrecio
-            WHERE @articulo LIKE baseCol + '%' OR baseCol = @articulo
+            SELECT MAX(PrecioLista) as pvp
+            FROM Articulos
+            WHERE Base = @articulo AND PrecioLista > 0
         `;
 
         const pvpResult = await executeQuery(pvpQuery.replace(/@articulo/g, `'${articulo}'`));
-        const pvpFromArticuloPrecio = pvpResult.recordset[0]?.pvp || null;
+        const pvpFromArticulos = pvpResult.recordset[0]?.pvp || null;
+
+        console.log(`PVP Query for ${articulo}:`, { pvpFromArticulos });
 
         const baseInfoQuery = `
             SELECT
@@ -162,7 +160,8 @@ export async function GET(
                 SUM(T.Cantidad) as unidades,
                 CAST(SUM(T.PRECIO) as decimal(18,2)) as Venta,
                 MAX(T.PRECIO / NULLIF(T.Cantidad, 0)) as precioUnitarioTransaccion,
-                MIN(T.Fecha) as primeraVenta
+                MIN(T.Fecha) as primeraVenta,
+                MAX(T.Fecha) as ultimaVenta
             FROM Transacciones T
             INNER JOIN (
                 SELECT AR.base as BaseCol, AR.descripcionCorta
@@ -624,11 +623,12 @@ export async function GET(
 
         // Get stock by store and size (talla) for matrix
         const stockByStoreAndTallaQuery = `
-            SELECT 
+            SELECT
                 M.IdArticulo,
                 M.idDeposito as idDeposito,
                 MAX(TI.Descripcion) as descripcion,
-                SUM(M.TotalStock) as stock
+                SUM(M.TotalStock) as stock,
+                SUM(M.Pendientes) as pendiente
             FROM MovStockTotalResumen M
             INNER JOIN Tiendas TI ON TI.IdTienda = M.idDeposito
             WHERE M.IdArticulo LIKE @articulo + '%'
@@ -716,6 +716,7 @@ export async function GET(
                     id: storeId,
                     descripcion: storeDesc,
                     stock: Number(stockRow?.stock) || 0,
+                    pendiente: Number(stockRow?.pendiente) || 0,
                     ventas: Number(salesRow?.ventas) || 0
                 };
             });
@@ -728,20 +729,23 @@ export async function GET(
         sortedStoreIds.forEach(storeId => {
             const storeDesc = storesInfo.get(storeId) || '';
             let totalStock = 0;
+            let totalPendiente = 0;
             let totalVentas = 0;
-            
+
             matrixData.forEach(row => {
                 const cell = row[`store_${storeId}`];
                 if (cell) {
                     totalStock += cell.stock || 0;
+                    totalPendiente += cell.pendiente || 0;
                     totalVentas += cell.ventas || 0;
                 }
             });
-            
+
             totalsRow[`store_${storeId}`] = {
                 id: storeId,
                 descripcion: storeDesc,
                 stock: totalStock,
+                pendiente: totalPendiente,
                 ventas: totalVentas
             };
         });
@@ -781,20 +785,21 @@ export async function GET(
         });
 
         // Calcular métricas adicionales
-        // PVP = precio de lista desde ArticuloPrecio (consulta independiente para evitar problemas de GROUP BY)
-        // Si no hay precio en ArticuloPrecio, usar el precio unitario de transacciones como fallback
-        const pvp = Number(pvpFromArticuloPrecio) || Number(product.precioUnitarioTransaccion) || 0;
+        // PVP = PrecioLista desde Articulos
+        // Si no hay precio en Articulos, usar el precio unitario de transacciones como fallback
+        const pvp = Number(pvpFromArticulos) || Number(product.precioUnitarioTransaccion) || 0;
         const precioVenta = pvp; // Mantener para compatibilidad
-        const ultimoCostoValue = ultimaCompra ? Number(ultimaCompra.costoPromedio) * 1.22 : 0; // Con IVA
+        // UltimoCosto desde UltimaCompra (ya incluye IVA)
+        const ultimoCostoValue = ultimaCompra ? Number(ultimaCompra.costoPromedio) : 0;
         
         // ASP (Precio Promedio de Venta) = Importe Total / Unidades Vendidas
         const asp = unidadesVendidasDesdeUltCompra > 0 
             ? importeVentaDesdeUltCompra / unidadesVendidasDesdeUltCompra 
             : null;
         
-        // Margen = (Precio - Costo) / Precio * 100
-        const margen = asp && ultimoCostoValue > 0 
-            ? ((asp - ultimoCostoValue) / asp) * 100 
+        // Margen = (Precio / Costo) - 1 expresado en %
+        const margen = asp && ultimoCostoValue > 0
+            ? ((asp - ultimoCostoValue) / ultimoCostoValue) * 100
             : null;
         
         // Markup = (Precio - Costo) / Costo * 100
@@ -834,7 +839,7 @@ export async function GET(
             : null;
 
         const margenPeriodo = aspPeriodo && ultimoCostoValue > 0
-            ? ((aspPeriodo - ultimoCostoValue) / aspPeriodo) * 100
+            ? ((aspPeriodo - ultimoCostoValue) / ultimoCostoValue) * 100
             : null;
 
         // ============================================
@@ -875,7 +880,7 @@ export async function GET(
             unidadesVendidas: number;
             importeVenta: number;
             precioPromedio: number;
-            margenPromedio: number | null;
+            markupPromedio: number | null;
             porcentajeVendido: number | null;
         }> = [];
 
@@ -889,8 +894,9 @@ export async function GET(
 
             historialAnual = historialResult.recordset.map((row: any) => {
                 const precio = Number(row.precioPromedio) || 0;
-                const margen = precio > 0 && ultimoCostoValue > 0
-                    ? ((precio - ultimoCostoValue) / precio) * 100
+                // Markup = (Precio - Costo) / Costo * 100
+                const markup = precio > 0 && ultimoCostoValue > 0
+                    ? ((precio - ultimoCostoValue) / ultimoCostoValue) * 100
                     : null;
                 const porcentaje = totalVendidasHistorico > 0
                     ? (Number(row.unidadesVendidas) / totalVendidasHistorico) * 100
@@ -901,7 +907,7 @@ export async function GET(
                     unidadesVendidas: Number(row.unidadesVendidas) || 0,
                     importeVenta: Number(row.importeVenta) || 0,
                     precioPromedio: precio,
-                    margenPromedio: margen,
+                    markupPromedio: markup,
                     porcentajeVendido: porcentaje
                 };
             });
@@ -930,6 +936,92 @@ export async function GET(
             ? primeraVentaDate < ultimaCompraDate
             : false;
 
+        // ============================================
+        // COLORES RELACIONADOS (misma descripción, diferente código)
+        // Optimizado: queries separadas para evitar LIKE en JOIN
+        // ============================================
+        let coloresRelacionados: Array<{
+            BaseCol: string;
+            DescripcionColor: string;
+            stock: number;
+        }> = [];
+
+        try {
+            // Obtener la descripción del producto actual
+            const descripcionActual = product.descripcionCorta || '';
+
+            if (descripcionActual) {
+                // Query 1: Obtener productos con misma descripción (rápida, usa índice)
+                const coloresQuery = `
+                    SELECT DISTINCT A.Base as BaseCol, A.DescripcionCorta
+                    FROM Articulos A
+                    WHERE A.DescripcionCorta = @descripcion
+                `;
+
+                const coloresResult = await executeQuery(
+                    coloresQuery.replace(/@descripcion/g, `'${descripcionActual.replace(/'/g, "''")}'`)
+                );
+
+                if (coloresResult.recordset.length > 0) {
+                    // Query 2: Obtener stock para todos los productos encontrados (batch)
+                    const baseCols = coloresResult.recordset.map((r: any) => r.BaseCol);
+                    const stockConditions = baseCols.map((bc: string) => `IdArticulo LIKE '${bc}%'`).join(' OR ');
+
+                    const stockQuery = `
+                        SELECT
+                            LEFT(IdArticulo, CHARINDEX('.', IdArticulo + '.') + CHARINDEX('.', SUBSTRING(IdArticulo, CHARINDEX('.', IdArticulo) + 1, LEN(IdArticulo))) + CHARINDEX('.', IdArticulo) - 1) as BasePrefix,
+                            SUM(TotalStock) as stock
+                        FROM MovStockTotalResumen
+                        WHERE ${stockConditions}
+                        GROUP BY LEFT(IdArticulo, CHARINDEX('.', IdArticulo + '.') + CHARINDEX('.', SUBSTRING(IdArticulo, CHARINDEX('.', IdArticulo) + 1, LEN(IdArticulo))) + CHARINDEX('.', IdArticulo) - 1)
+                    `;
+
+                    let stockMap = new Map<string, number>();
+                    try {
+                        const stockResult = await executeQuery(stockQuery);
+                        // Map stock by matching baseCol prefix
+                        stockResult.recordset.forEach((row: any) => {
+                            const prefix = row.BasePrefix;
+                            baseCols.forEach((bc: string) => {
+                                if (prefix && prefix.startsWith(bc.substring(0, Math.min(bc.length, prefix.length)))) {
+                                    stockMap.set(bc, (stockMap.get(bc) || 0) + Number(row.stock || 0));
+                                }
+                            });
+                        });
+                    } catch {
+                        // Si falla la query de stock, usar stock 0
+                        console.log('Stock query optimizada falló, usando query simple');
+                        // Fallback: query individual por baseCol (más lenta pero segura)
+                        for (const bc of baseCols.slice(0, 10)) { // Limitar a 10 para no sobrecargar
+                            try {
+                                const simpleStockQuery = `SELECT SUM(TotalStock) as stock FROM MovStockTotalResumen WHERE IdArticulo LIKE '${bc}%'`;
+                                const result = await executeQuery(simpleStockQuery);
+                                stockMap.set(bc, Number(result.recordset[0]?.stock) || 0);
+                            } catch { /* ignore */ }
+                        }
+                    }
+
+                    // Combinar resultados
+                    coloresRelacionados = coloresResult.recordset.map((row: any) => ({
+                        BaseCol: row.BaseCol,
+                        DescripcionColor: row.DescripcionCorta || '',
+                        stock: stockMap.get(row.BaseCol) || 0
+                    }));
+
+                    // Ordenar: primero el actual, luego por stock descendente
+                    coloresRelacionados.sort((a, b) => {
+                        if (a.BaseCol === articulo) return -1;
+                        if (b.BaseCol === articulo) return 1;
+                        return b.stock - a.stock;
+                    });
+                }
+
+                console.log(`Colores relacionados for ${articulo}:`, coloresRelacionados.length, 'encontrados');
+            }
+        } catch (err) {
+            console.error('Error getting colores relacionados:', err);
+        }
+
         const response = NextResponse.json({
             ...product,
             sucursales: sucursales,
@@ -952,6 +1044,7 @@ export async function GET(
             unidades: product.unidades || 0, // Total units sold (all time)
             ultimoCosto: ultimaCompra ? Number(ultimaCompra.costoPromedio) : 0,
             primeraVentaFormatted: formatDate(product.primeraVenta),
+            ultimaVentaFormatted: formatDate(product.ultimaVenta),
             fechaUltCompraFormatted: formatDate(ultimaCompra?.fecha || null),
             precioVenta: precioVenta,
             pvp: pvp, // PVP igual que en tabla de análisis
@@ -978,7 +1071,9 @@ export async function GET(
             temporadas: temporadas,
             primeraCompraAnio: primeraCompraAnio,
             // Tipo de producto
-            esCarryover: esCarryover // true = se vende todo el año, false = estacional
+            esCarryover: esCarryover, // true = se vende todo el año, false = estacional
+            // Colores relacionados (misma descripción, diferente código)
+            coloresRelacionados: coloresRelacionados
         });
 
         // Add no-cache headers

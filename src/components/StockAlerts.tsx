@@ -5,6 +5,8 @@ import { AlertTriangle, Package, Store, TrendingUp, X, ExternalLink, ChevronRigh
 import { motion, AnimatePresence, PanInfo } from 'framer-motion';
 import { useFilters } from '@/context/FilterContext';
 import { ProductDetail } from './ProductDetail';
+import { exportToXlsx, ExportColumn } from '@/lib/export-xlsx';
+import { ExportButton } from './ExportButton';
 
 interface StockAlert {
     baseCol: string;
@@ -386,15 +388,42 @@ export function StockAlerts({ onProductClick }: StockAlertsProps) {
                         >
                             <div className="p-6 border-b border-slate-800 flex items-center justify-between">
                                 <h2 className="text-2xl font-bold text-white">Detalle de Alerta</h2>
-                                <button
-                                    onClick={() => {
-                                        setShowDetailModal(false);
-                                        setSelectedProductId(null);
-                                    }}
-                                    className="p-2 hover:bg-slate-800 rounded-xl text-slate-400 hover:text-white transition-all"
-                                >
-                                    <X size={24} />
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    <ExportButton
+                                        onClick={() => {
+                                            const alert = data?.alerts.find(a => a.baseCol === selectedProductId);
+                                            if (!alert) return;
+                                            type TiendaRow = { descripcion: string; unidadesVendidas: number; porcentajeVentas?: string; stock: number; estado: string };
+                                            const rows: TiendaRow[] = [];
+                                            if (alert.problema.tiendas) {
+                                                alert.problema.tiendas.forEach(t => rows.push({ descripcion: t.descripcion, unidadesVendidas: t.unidadesVendidas, porcentajeVentas: t.porcentajeVentas, stock: t.stock, estado: t.stock === 0 ? 'SIN STOCK' : 'BAJO STOCK' }));
+                                            }
+                                            if (alert.problema.tiendasNecesitanStock) {
+                                                alert.problema.tiendasNecesitanStock.forEach(t => rows.push({ descripcion: t.descripcion, unidadesVendidas: t.unidadesVendidas, porcentajeVentas: t.porcentajeVentas, stock: t.stock, estado: 'NECESITA' }));
+                                            }
+                                            if (alert.problema.tiendasConExceso) {
+                                                alert.problema.tiendasConExceso.forEach(t => rows.push({ descripcion: t.descripcion, unidadesVendidas: t.unidadesVendidas, porcentajeVentas: t.porcentajeVentas, stock: t.stock, estado: 'EXCESO' }));
+                                            }
+                                            const cols: ExportColumn<TiendaRow>[] = [
+                                                { header: 'Tienda', accessor: r => r.descripcion },
+                                                { header: 'Ventas', accessor: r => r.unidadesVendidas },
+                                                { header: '% Ventas', accessor: r => r.porcentajeVentas || '' },
+                                                { header: 'Stock', accessor: r => r.stock },
+                                                { header: 'Estado', accessor: r => r.estado },
+                                            ];
+                                            exportToXlsx(rows, cols, `alerta-stock-${alert.baseCol}`, 'Alerta Stock');
+                                        }}
+                                    />
+                                    <button
+                                        onClick={() => {
+                                            setShowDetailModal(false);
+                                            setSelectedProductId(null);
+                                        }}
+                                        className="p-2 hover:bg-slate-800 rounded-xl text-slate-400 hover:text-white transition-all"
+                                    >
+                                        <X size={24} />
+                                    </button>
+                                </div>
                             </div>
                             <div className="flex-1 overflow-y-auto p-6">
                                 {data?.alerts.find(a => a.baseCol === selectedProductId) && (() => {

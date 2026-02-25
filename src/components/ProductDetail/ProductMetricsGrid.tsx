@@ -7,7 +7,7 @@ interface ProductMetricsGridProps {
   ritmoVenta: number | null; // pares por día
   diasStock: number | null;
   stock: number;
-  margenBruto: number | null;
+  margen: number | null; // Margen: (ASP / Costo - 1) * 100
   costo: number;
   pvp: number;
   unidadesVendidas: number;
@@ -40,7 +40,7 @@ export function ProductMetricsGrid({
   ritmoVenta,
   diasStock,
   stock,
-  margenBruto,
+  margen,
   costo,
   pvp,
   unidadesVendidas,
@@ -112,17 +112,17 @@ export function ProductMetricsGrid({
         </div>
 
         <div className={`border rounded-xl p-2.5 ${
-          margenBruto !== null && margenBruto >= 40 ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' :
-          margenBruto !== null && margenBruto < 20 ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' :
+          margen !== null && margen >= 80 ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' :
+          margen !== null && margen < 30 ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800' :
           'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700'
         }`}>
-          <div className="text-[9px] text-slate-500 dark:text-slate-400 uppercase font-semibold mb-1">Mg Bruto</div>
+          <div className="text-[9px] text-slate-500 dark:text-slate-400 uppercase font-semibold mb-1">Margen</div>
           <div className={`text-lg font-bold ${
-            margenBruto !== null && margenBruto >= 40 ? 'text-emerald-700 dark:text-emerald-400' :
-            margenBruto !== null && margenBruto < 20 ? 'text-red-700 dark:text-red-400' :
+            margen !== null && margen >= 80 ? 'text-emerald-700 dark:text-emerald-400' :
+            margen !== null && margen < 30 ? 'text-red-700 dark:text-red-400' :
             'text-slate-900 dark:text-white'
           }`}>
-            {formatPercent(margenBruto)}
+            {formatPercent(margen)}
           </div>
         </div>
       </div>
@@ -130,7 +130,7 @@ export function ProductMetricsGrid({
       {/* Fila 2: Costo, PVP, Últ.Costo, Stock */}
       <div className="grid grid-cols-4 gap-2">
         <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5">
-          <div className="text-[9px] text-slate-500 dark:text-slate-400 uppercase font-semibold mb-1">Costo+IVA</div>
+          <div className="text-[9px] text-slate-500 dark:text-slate-400 uppercase font-semibold mb-1">Costo IVA inc</div>
           <div className="text-lg font-bold text-slate-900 dark:text-white">
             {formatCurrency(costo)}
           </div>
@@ -144,9 +144,9 @@ export function ProductMetricsGrid({
         </div>
 
         <div className="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5">
-          <div className="text-[9px] text-slate-500 dark:text-slate-400 uppercase font-semibold mb-1">Últ.Costo</div>
+          <div className="text-[9px] text-slate-500 dark:text-slate-400 uppercase font-semibold mb-1">Costo s/IVA</div>
           <div className="text-lg font-bold text-slate-700 dark:text-slate-300">
-            {formatCurrency(ultimoCosto)}
+            {formatCurrency(Math.round(ultimoCosto / 1.22))}
           </div>
         </div>
 

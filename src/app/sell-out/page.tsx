@@ -23,6 +23,8 @@ import { SellOutResponse, SellOutByBrand, SellOutByProduct, ProductoEstado, UMBR
 import { ProductDetail } from '@/components/ProductDetail';
 import { AddToPriceQueueModal } from '@/components/AddToPriceQueueModal';
 import { getProductImageUrl } from '@/lib/utils';
+import { exportToXlsx, exportMultiSheet, ExportColumn } from '@/lib/export-xlsx';
+import { ExportButton } from '@/components/ExportButton';
 
 type TabId = 'marca' | 'producto' | 'fast-movers' | 'slow-movers' | 'clavos' | 'saldos';
 
@@ -147,7 +149,56 @@ export default function SellOutPage() {
   const fastMovers = data?.byProduct.filter(p => p.estado === 'FAST_MOVER') || [];
   const slowMovers = data?.byProduct.filter(p => p.estado === 'SLOW_MOVER') || [];
   const clavos = data?.byProduct.filter(p => p.estado === 'CLAVO') || [];
-  const saldos = data?.byProduct.filter(p => p.esSaldo) || [];
+  const saldos = data?.byProduct.filter(p => p.esSaldo && p.estado !== 'FAST_MOVER') || [];
+
+  const handleExport = () => {
+    if (!data) return;
+
+    const brandCols: ExportColumn<SellOutByBrand>[] = [
+      { header: 'Marca', accessor: r => r.descripcionMarca },
+      { header: 'Productos', accessor: r => r.cantidadProductos },
+      { header: 'Unidades', accessor: r => r.totalUnidades },
+      { header: 'Venta $', accessor: r => Math.round(r.totalVenta) },
+      { header: 'Stock', accessor: r => r.totalStock },
+      { header: 'Fast Movers', accessor: r => r.cantidadFastMovers },
+      { header: 'OK', accessor: r => r.cantidadOK },
+      { header: 'Slow Movers', accessor: r => r.cantidadSlowMovers },
+      { header: 'Clavos', accessor: r => r.cantidadClavos },
+      { header: '% Slow', accessor: r => Number(r.porcentajeSlowMovers.toFixed(1)) },
+    ];
+
+    const productCols: ExportColumn<SellOutByProduct>[] = [
+      { header: 'Código', accessor: r => r.BaseCol },
+      { header: 'Marca', accessor: r => r.descripcionMarca },
+      { header: 'Descripción', accessor: r => r.descripcionCorta },
+      { header: 'Unidades', accessor: r => r.unidadesVendidas },
+      { header: 'Venta $', accessor: r => Math.round(r.ventaTotal) },
+      { header: 'PVP', accessor: r => r.pvp != null ? Math.round(r.pvp) : '' },
+      { header: 'Costo', accessor: r => r.ultimoCosto != null ? Math.round(r.ultimoCosto) : '' },
+      { header: 'Margen %', accessor: r => r.margen != null ? Number(r.margen.toFixed(1)) : '' },
+      { header: 'Stock', accessor: r => r.stockTotal },
+      { header: 'Pares/Día', accessor: r => r.paresPorDia != null ? Number(r.paresPorDia.toFixed(2)) : '' },
+      { header: 'Días Stock', accessor: r => r.diasStock != null ? Math.round(r.diasStock) : '' },
+      { header: 'Últ. Compra', accessor: r => r.fechaUltimaCompra ? new Date(r.fechaUltimaCompra as string).toLocaleDateString('es-AR') : '' },
+      { header: 'Carryover', accessor: r => r.esCarryover ? 'Sí' : '' },
+      { header: 'Estado', accessor: r => r.estado },
+      { header: 'Saldo', accessor: r => r.esSaldo ? 'Sí' : '' },
+    ];
+
+    if (activeTab === 'marca') {
+      exportToXlsx(data.byBrand, brandCols, 'sell-out-marcas', 'Por Marca');
+    } else {
+      const productos = activeTab === 'producto' ? data.byProduct :
+                        activeTab === 'fast-movers' ? fastMovers :
+                        activeTab === 'slow-movers' ? slowMovers :
+                        activeTab === 'clavos' ? clavos : saldos;
+      const tabName = activeTab === 'producto' ? 'Todos' :
+                      activeTab === 'fast-movers' ? 'Fast Movers' :
+                      activeTab === 'slow-movers' ? 'Slow Movers' :
+                      activeTab === 'clavos' ? 'Clavos' : 'Saldos';
+      exportToXlsx(productos, productCols, `sell-out-${activeTab}`, tabName);
+    }
+  };
 
   const renderResumen = () => {
     if (!data) return null;
@@ -300,7 +351,7 @@ export default function SellOutPage() {
                 </tr>
                 {expandedBrand === marca.idMarca && (
                   <tr>
-                    <td colSpan={10} className="bg-gray-50 dark:bg-gray-700/30 px-4 py-2">
+                    <td colSpan={13} className="bg-gray-50 dark:bg-gray-700/30 px-4 py-2">
                       <div className="text-sm text-gray-500 mb-2">
                         Productos de {marca.descripcionMarca}:
                       </div>
@@ -353,72 +404,121 @@ export default function SellOutPage() {
 
   const renderProductoTab = (productos: SellOutByProduct[], title?: string) => {
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden">
+      <div className="bg-white dark:bg-slate-900/50 rounded-lg dark:rounded-3xl shadow-sm dark:shadow-2xl overflow-hidden dark:border dark:border-slate-800">
         {title && (
-          <div className="px-4 py-3 border-b dark:border-gray-700">
-            <h3 className="font-semibold">{title}</h3>
+          <div className="px-4 py-3 border-b dark:border-slate-800">
+            <h3 className="font-semibold text-gray-900 dark:text-white">{title}</h3>
           </div>
         )}
         <div className="max-h-[600px] overflow-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 dark:bg-gray-700 sticky top-0">
+          <table className="w-full min-w-[1200px]">
+            <thead className="bg-gray-50 dark:bg-slate-800/30 sticky top-0 z-10">
               <tr>
-                <th className="px-2 py-3 text-left text-sm font-semibold w-16">Foto</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold">Código</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold">Marca</th>
-                <th className="px-4 py-3 text-left text-sm font-semibold">Descripción</th>
-                <th className="px-4 py-3 text-right text-sm font-semibold">Unidades</th>
-                <th className="px-4 py-3 text-right text-sm font-semibold">Venta</th>
-                <th className="px-4 py-3 text-right text-sm font-semibold">PVP</th>
-                <th className="px-4 py-3 text-right text-sm font-semibold">Stock</th>
-                <th className="px-4 py-3 text-right text-sm font-semibold">Pares/Día</th>
-                <th className="px-4 py-3 text-right text-sm font-semibold">Días Stock</th>
-                <th className="px-4 py-3 text-center text-sm font-semibold">Estado</th>
-                <th className="px-4 py-3 text-center text-sm font-semibold">Acción</th>
+                <th className="p-1 text-xs font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider w-24">Img</th>
+                <th className="px-3 py-3 text-left text-xs font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider">Artículo</th>
+                <th className="px-3 py-3 text-right text-xs font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider">Unid.</th>
+                <th className="px-3 py-3 text-right text-xs font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider">Stock</th>
+                <th className="px-3 py-3 text-right text-xs font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider">Costo</th>
+                <th className="px-3 py-3 text-right text-xs font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider">PVP</th>
+                <th className="px-3 py-3 text-right text-xs font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider">Venta $</th>
+                <th className="px-3 py-3 text-right text-xs font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider">Margen</th>
+                <th className="px-3 py-3 text-center text-xs font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider">Par/Día</th>
+                <th className="px-3 py-3 text-center text-xs font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider">Días Stock</th>
+                <th className="px-3 py-3 text-center text-xs font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider">Últ. Compra</th>
+                <th className="px-3 py-3 text-center text-xs font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider">Estado</th>
+                <th className="px-3 py-3 text-center text-xs font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider">Acción</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+            <tbody className="divide-y divide-gray-200 dark:divide-slate-800/50">
               {productos.map((p) => (
                 <tr
                   key={p.BaseCol}
-                  className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
+                  className="hover:bg-gray-50 dark:hover:bg-slate-800/30 transition-colors cursor-pointer group"
                   onClick={() => setSelectedProductId(p.BaseCol)}
                 >
-                  <td className="px-2 py-2">
-                    <img
-                      src={getProductImageUrl(p.BaseCol)}
-                      alt={p.descripcionCorta}
-                      className="w-12 h-12 object-cover rounded"
-                      onError={(e) => {
-                        e.currentTarget.src = 'https://placehold.co/48x48/1e293b/475569?text=IMG';
-                      }}
-                    />
+                  {/* Imagen grande */}
+                  <td className="p-1">
+                    <div className="w-20 h-20 bg-white rounded-lg overflow-hidden border border-gray-200 dark:border-slate-700 group-hover:border-blue-500/50 transition-all shadow-sm">
+                      <img
+                        src={getProductImageUrl(p.BaseCol)}
+                        alt={p.descripcionCorta}
+                        className="w-full h-full object-contain"
+                        onError={(e) => {
+                          e.currentTarget.src = 'https://placehold.co/128x128/1e293b/475569?text=IMG';
+                        }}
+                      />
+                    </div>
                   </td>
-                  <td className="px-4 py-3 font-mono text-sm">{p.BaseCol}</td>
-                  <td className="px-4 py-3">{p.descripcionMarca}</td>
-                  <td className="px-4 py-3 max-w-xs truncate">{p.descripcionCorta}</td>
-                  <td className="px-4 py-3 text-right">{formatNumber(p.unidadesVendidas)}</td>
-                  <td className="px-4 py-3 text-right">{formatCurrency(p.ventaTotal)}</td>
-                  <td className="px-4 py-3 text-right font-medium text-emerald-600">
+                  {/* Artículo: Marca / Descripción / SKU */}
+                  <td className="px-3 py-3">
+                    <div className="font-bold text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors text-sm">
+                      {p.descripcionMarca}
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-slate-400 truncate max-w-[200px]">
+                      {p.descripcionCorta}
+                    </div>
+                    <div className="text-xs text-gray-400 dark:text-slate-600 font-mono">{p.BaseCol}</div>
+                  </td>
+                  {/* Unidades */}
+                  <td className="px-3 py-3 text-right font-mono font-bold text-gray-900 dark:text-white tabular-nums">
+                    {formatNumber(p.unidadesVendidas)}
+                  </td>
+                  {/* Stock */}
+                  <td className="px-3 py-3 text-right">
+                    <span className={`font-mono tabular-nums font-bold ${
+                      p.stockTotal > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400 dark:text-slate-500'
+                    }`}>
+                      {formatNumber(p.stockTotal)}
+                    </span>
+                  </td>
+                  {/* Costo */}
+                  <td className="px-3 py-3 text-right font-mono text-gray-500 dark:text-slate-400 tabular-nums text-sm">
+                    {p.ultimoCosto ? formatCurrency(p.ultimoCosto) : '-'}
+                  </td>
+                  {/* PVP */}
+                  <td className="px-3 py-3 text-right font-mono text-emerald-600 dark:text-emerald-400 tabular-nums text-sm font-medium">
                     {p.pvp ? formatCurrency(p.pvp) : '-'}
                   </td>
-                  <td className="px-4 py-3 text-right">{formatNumber(p.stockTotal)}</td>
-                  <td className="px-4 py-3 text-right">
+                  {/* Venta */}
+                  <td className="px-3 py-3 text-right font-mono text-gray-900 dark:text-white tabular-nums text-sm font-medium">
+                    {formatCurrency(p.ventaTotal)}
+                  </td>
+                  {/* Margen */}
+                  <td className={`px-3 py-3 text-right font-mono tabular-nums text-sm font-medium ${
+                    p.margen != null && p.margen >= 30 ? 'text-emerald-600' :
+                    p.margen != null && p.margen >= 15 ? 'text-blue-600' : 'text-red-600'
+                  }`}>
+                    {p.margen != null ? `${p.margen.toFixed(1)}%` : '-'}
+                  </td>
+                  {/* Par/Día */}
+                  <td className="px-3 py-3 text-center font-mono text-gray-600 dark:text-slate-400 tabular-nums text-sm">
                     {p.paresPorDia !== null ? p.paresPorDia.toFixed(2) : '-'}
                   </td>
-                  <td className={`px-4 py-3 text-right font-medium ${
+                  {/* Días Stock */}
+                  <td className={`px-3 py-3 text-center font-mono tabular-nums text-sm font-medium ${
                     p.diasStock !== null && p.diasStock > 365 ? 'text-red-600' :
-                    p.diasStock !== null && p.diasStock > 180 ? 'text-amber-600' : ''
+                    p.diasStock !== null && p.diasStock > 180 ? 'text-amber-600' : 'text-gray-600 dark:text-slate-400'
                   }`}>
                     {p.diasStock !== null ? Math.round(p.diasStock) : '-'}
                   </td>
-                  <td className="px-4 py-3 text-center">
+                  {/* Últ. Compra */}
+                  <td className="px-3 py-3 text-center text-xs text-gray-500 dark:text-slate-500">
+                    {p.fechaUltimaCompra
+                      ? new Date(p.fechaUltimaCompra as string).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+                      : '-'}
+                  </td>
+                  {/* Estado */}
+                  <td className="px-3 py-3 text-center">
                     <div className="flex items-center justify-center gap-1">
                       <ProductStatusBadge estado={p.estado} size="sm" showLabel={false} />
                       {p.esSaldo && <SaldoBadge size="sm" />}
+                      {p.esCarryover && (
+                        <span className="px-1.5 py-0.5 text-[10px] font-bold bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 rounded">CO</span>
+                      )}
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-center">
+                  {/* Acción */}
+                  <td className="px-3 py-3 text-center">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -456,6 +556,12 @@ export default function SellOutPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <ExportButton
+              onClick={handleExport}
+              variant="button"
+              label="Exportar Excel"
+              disabled={!data || isLoading}
+            />
             <button
               onClick={() => setShowLegend(true)}
               className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
@@ -514,10 +620,10 @@ export default function SellOutPage() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-3 border-b-2 transition-colors whitespace-nowrap ${
+                className={`flex items-center gap-2 px-4 py-3 border-b-2 rounded-t-lg transition-colors whitespace-nowrap ${
                   isActive
-                    ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'
+                    ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-500 text-blue-700 dark:text-blue-400 font-semibold'
+                    : 'border-transparent text-gray-500 hover:bg-gray-50 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200'
                 }`}
               >
                 <Icon size={18} />

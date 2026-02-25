@@ -63,8 +63,8 @@ export async function POST(req: NextRequest) {
                     MAX(T.IdMarca) as IdMarca,
                     MAX(T.idGenero) as IdGenero,
                     MAX(T.DescripcionGenero) as DescripcionGenero,
-                    -- Precio actual (PVP o precio de última transacción)
-                    COALESCE(MAX(AP.Precio), MAX(T.Precio / NULLIF(T.Cantidad, 0))) as precio_actual,
+                    -- Precio actual (PrecioLista de Articulos o precio de última transacción)
+                    COALESCE(MAX(ART_PVP.PVP), MAX(T.Precio / NULLIF(T.Cantidad, 0))) as precio_actual,
                     -- Costo (último costo con IVA)
                     MAX(UC.ultimoCosto) * 1.22 as costo,
                     -- Fecha última compra
@@ -86,10 +86,11 @@ export async function POST(req: NextRequest) {
                     GROUP BY A.Base
                 ) UC ON UC.BaseCol = T.BaseCol
                 LEFT JOIN (
-                    SELECT baseCol as BaseCol, MAX(Precio) as Precio
-                    FROM ArticuloPrecio
-                    GROUP BY baseCol
-                ) AP ON AP.BaseCol = T.BaseCol
+                    SELECT Base as BaseCol, MAX(PrecioLista) as PVP
+                    FROM Articulos
+                    WHERE PrecioLista > 0
+                    GROUP BY Base
+                ) ART_PVP ON ART_PVP.BaseCol = T.BaseCol
                 WHERE 1=1
                 ${filters.stores?.length ? `AND T.IdDeposito IN (${filters.stores.join(',')})` : ''}
                 ${filters.categories?.length ? `AND T.IdClase IN (${filters.categories.join(',')})` : ''}

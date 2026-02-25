@@ -30,6 +30,10 @@ export function buildDashboardQuery(baseQuery: string, filters: FilterParams, op
         whereClauses.push(`${prefix}IdClase IN (${filters.categories.join(',')})`);
     }
 
+    if (filters.sections?.length) {
+        whereClauses.push(`${prefix}IdSeccion IN (${filters.sections.join(',')})`);
+    }
+
     if (filters.genders?.length) {
         whereClauses.push(`${prefix}idGenero IN (${filters.genders.join(',')})`);
     }

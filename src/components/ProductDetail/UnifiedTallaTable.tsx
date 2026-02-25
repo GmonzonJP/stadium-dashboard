@@ -1,10 +1,35 @@
 'use client';
 
-import React, { useMemo } from 'react';
-import { DEPOSITOS_CONFIG } from '@/types/sell-out';
+import React, { useMemo, useCallback } from 'react';
+import { exportRawToXlsx } from '@/lib/export-xlsx';
+import { ExportButton } from '@/components/ExportButton';
+
+// Función para obtener color del progress bar según sell-through
+function getSellThroughColor(sellThrough: number): { bg: string; text: string; bar: string } {
+  if (sellThrough >= 70) {
+    return {
+      bg: 'bg-emerald-100/50 dark:bg-emerald-900/20',
+      text: 'text-emerald-700 dark:text-emerald-300',
+      bar: 'rgba(16, 185, 129, 0.4)' // emerald-500 with opacity
+    };
+  } else if (sellThrough >= 40) {
+    return {
+      bg: 'bg-amber-100/50 dark:bg-amber-900/20',
+      text: 'text-amber-700 dark:text-amber-300',
+      bar: 'rgba(245, 158, 11, 0.4)' // amber-500 with opacity
+    };
+  } else {
+    return {
+      bg: 'bg-red-100/50 dark:bg-red-900/20',
+      text: 'text-red-700 dark:text-red-300',
+      bar: 'rgba(239, 68, 68, 0.4)' // red-500 with opacity
+    };
+  }
+}
 
 interface TallaData {
   stock: number;
+  pendiente: number;
   ventas: number;
 }
 
@@ -13,6 +38,7 @@ interface TiendaData {
   nombre: string;
   tallas: Record<string, TallaData>;
   totalStock: number;
+  totalPendiente: number;
   totalVentas: number;
 }
 
@@ -20,70 +46,185 @@ interface UnifiedTallaTableProps {
   tallas: string[];
   tiendas: TiendaData[];
   stockCentralPorTalla: Record<string, number>;
+  productName?: string;
+}
+
+// Clasificación de tiendas por nombre
+type TipoTienda = 'central' | 'stadium' | 'misscarol' | 'web' | 'saldos' | 'ocultar';
+
+function clasificarTienda(nombre: string, id?: number): TipoTienda {
+  const nombreUpper = nombre.toUpperCase().trim();
+
+  // Depósitos centrales: 999 (central) y 998 (recepción) - siempre mostrar en tope
+  // Identificar por ID o por nombre que contenga "CENTRAL" o "999" o "998"
+  if (id === 999 || id === 998 ||
+      nombreUpper.includes('CENTRAL') ||
+      nombreUpper.includes('_999') ||
+      nombreUpper.includes('_998') ||
+      nombreUpper.endsWith('999') ||
+      nombreUpper.endsWith('998')) {
+    return 'central';
+  }
+
+  // Web: empieza con "WEB"
+  if (nombreUpper.startsWith('WEB')) {
+    return 'web';
+  }
+
+  // Saldos (outlet auxiliares): termina con "-SALDOS"
+  if (nombreUpper.endsWith('-SALDOS') || nombreUpper.endsWith(' SALDOS')) {
+    return 'saldos';
+  }
+
+  // Stadium: empieza con "STADIUM"
+  if (nombreUpper.startsWith('STADIUM')) {
+    return 'stadium';
+  }
+
+  // Miss Carol: empieza con "MISSCAROL" o "MISS CAROL"
+  if (nombreUpper.startsWith('MISSCAROL') || nombreUpper.startsWith('MISS CAROL')) {
+    return 'misscarol';
+  }
+
+  // Todo lo demás: ocultar
+  return 'ocultar';
 }
 
 export function UnifiedTallaTable({
   tallas,
   tiendas,
   stockCentralPorTalla,
+  productName,
 }: UnifiedTallaTableProps) {
-  // Separar tiendas por tipo (filtrar las ocultas)
-  const { centrales, regulares, outlets, web } = useMemo(() => {
-    const centralIds = DEPOSITOS_CONFIG.central as readonly number[];
-    const outletIds = DEPOSITOS_CONFIG.outlet as readonly number[];
-    const webIds = DEPOSITOS_CONFIG.web as readonly number[];
-    const ocultarIds = DEPOSITOS_CONFIG.ocultar as readonly number[];
+  // Separar tiendas por tipo basado en nombre
+  const { central, stadium, misscarol, web, saldos, tiendasVisibles } = useMemo(() => {
+    const central: TiendaData[] = [];
+    const stadium: TiendaData[] = [];
+    const misscarol: TiendaData[] = [];
+    const web: TiendaData[] = [];
+    const saldos: TiendaData[] = [];
 
-    // Filtrar las tiendas que deben ocultarse
-    const tiendasVisibles = tiendas.filter(t => !ocultarIds.includes(t.id));
+    for (const tienda of tiendas) {
+      const tipo = clasificarTienda(tienda.nombre, tienda.id);
+      switch (tipo) {
+        case 'central':
+          central.push(tienda);
+          break;
+        case 'stadium':
+          stadium.push(tienda);
+          break;
+        case 'misscarol':
+          misscarol.push(tienda);
+          break;
+        case 'web':
+          web.push(tienda);
+          break;
+        case 'saldos':
+          saldos.push(tienda);
+          break;
+        // 'ocultar' no se agrega a ningún grupo
+      }
+    }
 
-    const centrales = tiendasVisibles.filter(t => centralIds.includes(t.id));
-    const outlets = tiendasVisibles.filter(t => outletIds.includes(t.id));
-    const web = tiendasVisibles.filter(t => webIds.includes(t.id));
-    const regulares = tiendasVisibles.filter(
-      t => !centralIds.includes(t.id) && !outletIds.includes(t.id) && !webIds.includes(t.id)
-    );
-    return { centrales, regulares, outlets, web };
+    // Ordenar: central por ID descendente (999 primero), resto alfabéticamente
+    central.sort((a, b) => b.id - a.id);
+    stadium.sort((a, b) => a.nombre.localeCompare(b.nombre));
+    misscarol.sort((a, b) => a.nombre.localeCompare(b.nombre));
+    web.sort((a, b) => a.nombre.localeCompare(b.nombre));
+    saldos.sort((a, b) => a.nombre.localeCompare(b.nombre));
+
+    // Tiendas visibles = central primero, luego el resto
+    const tiendasVisibles = [...central, ...stadium, ...misscarol, ...web, ...saldos];
+
+    return { central, stadium, misscarol, web, saldos, tiendasVisibles };
   }, [tiendas]);
 
-  // Calcular totales de stock y ventas por talla (excluyendo ocultas y web para stock)
-  const ocultarIds = DEPOSITOS_CONFIG.ocultar as readonly number[];
-  const webIds = DEPOSITOS_CONFIG.web as readonly number[];
-
+  // Calcular totales de stock y ventas por talla (excluyendo web para stock)
   const totalesStock = useMemo(() => {
-    const totales: Record<string, number> = {};
-    const tiendasParaStock = tiendas.filter(t => !ocultarIds.includes(t.id) && !webIds.includes(t.id));
+    const totales: Record<string, { stock: number; pendiente: number }> = {};
+    // Stock: central, stadium, misscarol, saldos (NO web)
+    const tiendasParaStock = [...central, ...stadium, ...misscarol, ...saldos];
     for (const talla of tallas) {
-      totales[talla] = tiendasParaStock.reduce((sum, t) => sum + (t.tallas[talla]?.stock || 0), 0);
+      totales[talla] = {
+        stock: tiendasParaStock.reduce((sum, t) => sum + (t.tallas[talla]?.stock || 0), 0),
+        pendiente: tiendasParaStock.reduce((sum, t) => sum + (t.tallas[talla]?.pendiente || 0), 0),
+      };
     }
     return totales;
-  }, [tiendas, tallas]);
+  }, [central, stadium, misscarol, saldos, tallas]);
 
   const totalesVentas = useMemo(() => {
     const totales: Record<string, number> = {};
-    const tiendasParaVentas = tiendas.filter(t => !ocultarIds.includes(t.id));
+    // Ventas: todas las tiendas visibles
     for (const talla of tallas) {
-      totales[talla] = tiendasParaVentas.reduce((sum, t) => sum + (t.tallas[talla]?.ventas || 0), 0);
+      totales[talla] = tiendasVisibles.reduce((sum, t) => sum + (t.tallas[talla]?.ventas || 0), 0);
     }
     return totales;
-  }, [tiendas, tallas]);
+  }, [tiendasVisibles, tallas]);
 
-  const totalStockGeneral = Object.values(totalesStock).reduce((a, b) => a + b, 0);
+  const totalStockGeneral = Object.values(totalesStock).reduce((a, b) => a + b.stock, 0);
+  const totalPendienteGeneral = Object.values(totalesStock).reduce((a, b) => a + b.pendiente, 0);
   const totalVentasGeneral = Object.values(totalesVentas).reduce((a, b) => a + b, 0);
 
-  // Verificar si una celda debe mostrarse en rojo
-  const esCeldaRoja = (tiendaId: number, talla: string, stock: number): boolean => {
-    const centralIds = DEPOSITOS_CONFIG.central as readonly number[];
-    const outletIds = DEPOSITOS_CONFIG.outlet as readonly number[];
-    // No marcar en rojo: central, outlet, web, ocultar
-    if (centralIds.includes(tiendaId) || outletIds.includes(tiendaId) || webIds.includes(tiendaId) || ocultarIds.includes(tiendaId)) {
+  // Calcular sell-through por talla para la fila de totales
+  const sellThroughPorTalla = useMemo(() => {
+    const result: Record<string, { comprado: number; stock: number; ventas: number; sellThrough: number }> = {};
+    for (const talla of tallas) {
+      const stock = totalesStock[talla]?.stock || 0;
+      const ventas = totalesVentas[talla] || 0;
+      const comprado = stock + ventas; // Lo que teníamos originalmente
+      const sellThrough = comprado > 0 ? (ventas / comprado) * 100 : 0;
+      result[talla] = { comprado, stock, ventas, sellThrough };
+    }
+    return result;
+  }, [tallas, totalesStock, totalesVentas]);
+
+  // Sell-through general
+  const sellThroughGeneral = useMemo(() => {
+    const comprado = totalStockGeneral + totalVentasGeneral;
+    return comprado > 0 ? (totalVentasGeneral / comprado) * 100 : 0;
+  }, [totalStockGeneral, totalVentasGeneral]);
+
+  const handleExport = useCallback(() => {
+    const stockHeaders: (string | number)[] = ['Tienda', ...tallas.map(t => `Stock ${t}`), 'Total Stock', ...tallas.map(t => `Ventas ${t}`), 'Total Ventas'];
+    const stockRows: (string | number | null)[][] = tiendasVisibles.map(t => {
+      const tipo = clasificarTienda(t.nombre, t.id);
+      const isWeb = tipo === 'web';
+      return [
+        t.nombre,
+        ...tallas.map(talla => isWeb ? '' as any : (t.tallas[talla]?.stock || 0)),
+        isWeb ? '' as any : t.totalStock,
+        ...tallas.map(talla => t.tallas[talla]?.ventas || 0),
+        t.totalVentas,
+      ];
+    });
+    // Add totals row
+    stockRows.push([
+      'TOTAL',
+      ...tallas.map(t => totalesStock[t]?.stock || 0),
+      totalStockGeneral,
+      ...tallas.map(t => totalesVentas[t] || 0),
+      totalVentasGeneral,
+    ]);
+
+    exportRawToXlsx(
+      [{ name: 'Stock y Ventas', rows: [stockHeaders, ...stockRows] }],
+      `stock-tallas${productName ? `-${productName}` : ''}`
+    );
+  }, [tallas, tiendasVisibles, totalesStock, totalesVentas, totalStockGeneral, totalVentasGeneral, productName]);
+
+  // Verificar si una celda debe mostrarse en rojo (stock 0 pero hay en central/deposito principal)
+  const esCeldaRoja = (tienda: TiendaData, talla: string, stock: number): boolean => {
+    const tipo = clasificarTienda(tienda.nombre);
+    // No marcar en rojo: web, saldos
+    if (tipo === 'web' || tipo === 'saldos') {
       return false;
     }
     return stock === 0 && (stockCentralPorTalla[talla] || 0) > 0;
   };
 
-  const renderStockCell = (tiendaId: number, talla: string, stock: number) => {
-    const esRoja = esCeldaRoja(tiendaId, talla, stock);
+  const renderStockCell = (tienda: TiendaData, talla: string, stock: number, pendiente: number = 0) => {
+    const esRoja = esCeldaRoja(tienda, talla, stock);
 
     return (
       <td
@@ -92,15 +233,20 @@ export function UnifiedTallaTable({
           esRoja ? 'bg-red-100 dark:bg-red-900/30' : ''
         }`}
       >
-        {stock === 0 ? (
-          esRoja ? (
-            <span className="text-red-600 dark:text-red-400 font-medium">0</span>
+        <div className="flex items-center justify-center gap-0.5">
+          {stock === 0 ? (
+            esRoja ? (
+              <span className="text-red-600 dark:text-red-400 font-medium">0</span>
+            ) : (
+              <span className="text-gray-300 dark:text-gray-600">-</span>
+            )
           ) : (
-            <span className="text-gray-300 dark:text-gray-600">-</span>
-          )
-        ) : (
-          <span className="text-gray-700 dark:text-gray-300 font-medium">{stock}</span>
-        )}
+            <span className="text-gray-700 dark:text-gray-300 font-medium">{stock}</span>
+          )}
+          {pendiente > 0 && (
+            <span className="text-blue-500 dark:text-blue-400 text-[10px] font-semibold">+{pendiente}</span>
+          )}
+        </div>
       </td>
     );
   };
@@ -120,14 +266,21 @@ export function UnifiedTallaTable({
     );
   };
 
-  const renderTiendaRow = (tienda: TiendaData, isCentral: boolean = false, isOutlet: boolean = false, isWeb: boolean = false) => {
+  const renderTiendaRow = (tienda: TiendaData, tipo: TipoTienda) => {
+    const isWeb = tipo === 'web';
+    const isSaldos = tipo === 'saldos';
+    const isMissCarol = tipo === 'misscarol';
+    const isCentral = tipo === 'central';
+
     const bgClass = isCentral
-      ? 'bg-yellow-50/50 dark:bg-yellow-900/10'
-      : isOutlet
+      ? 'bg-amber-50/30 dark:bg-amber-900/5'
+      : isSaldos
         ? 'bg-purple-50/30 dark:bg-purple-900/5'
         : isWeb
           ? 'bg-cyan-50/30 dark:bg-cyan-900/5'
-          : 'bg-white dark:bg-gray-900';
+          : isMissCarol
+            ? 'bg-pink-50/30 dark:bg-pink-900/5'
+            : 'bg-white dark:bg-gray-900';
 
     return (
       <tr key={tienda.id} className={`border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800/50`}>
@@ -137,9 +290,16 @@ export function UnifiedTallaTable({
         {/* Stock columns - ocultar para tiendas web */}
         {tallas.map(talla => isWeb ? (
           <td key={`stock-${talla}`} className="px-1.5 py-1 text-center text-xs text-gray-300 dark:text-gray-600">-</td>
-        ) : renderStockCell(tienda.id, talla, tienda.tallas[talla]?.stock || 0))}
+        ) : renderStockCell(tienda, talla, tienda.tallas[talla]?.stock || 0, tienda.tallas[talla]?.pendiente || 0))}
         <td className="px-2 py-1 text-center text-xs font-bold bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 border-r-2 border-blue-200 dark:border-blue-800">
-          {isWeb ? '-' : (tienda.totalStock || '-')}
+          {isWeb ? '-' : (
+            <div className="flex items-center justify-center gap-0.5">
+              <span>{tienda.totalStock || '-'}</span>
+              {tienda.totalPendiente > 0 && (
+                <span className="text-blue-500 dark:text-blue-400 text-[10px]">+{tienda.totalPendiente}</span>
+              )}
+            </div>
+          )}
         </td>
         {/* Ventas columns */}
         {tallas.map(talla => renderVentasCell(talla, tienda.tallas[talla]?.ventas || 0))}
@@ -152,6 +312,9 @@ export function UnifiedTallaTable({
 
   return (
     <div className="border rounded-xl overflow-hidden border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+      <div className="flex items-center justify-end px-3 pt-2">
+        <ExportButton onClick={handleExport} disabled={tiendasVisibles.length === 0} />
+      </div>
       <div className="max-h-[450px] overflow-auto custom-scrollbar">
         <table className="w-full text-sm">
           {/* Double Header: Stock | Ventas */}
@@ -207,43 +370,55 @@ export function UnifiedTallaTable({
           </thead>
 
           <tbody>
-            {/* Central primero */}
-            {centrales.length > 0 && (
+            {/* Depósitos Centrales (999, 998) - siempre en tope */}
+            {central.length > 0 && (
               <>
-                <tr className="bg-yellow-100/50 dark:bg-yellow-900/20">
-                  <td colSpan={tallas.length * 2 + 3} className="px-2 py-1 text-[10px] font-bold text-yellow-700 dark:text-yellow-500 uppercase">
-                    Central
+                <tr className="bg-amber-100/50 dark:bg-amber-900/20">
+                  <td colSpan={tallas.length * 2 + 3} className="px-2 py-1 text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase">
+                    Depósitos Centrales
                   </td>
                 </tr>
-                {centrales.map(tienda => renderTiendaRow(tienda, true, false))}
+                {central.map(tienda => renderTiendaRow(tienda, 'central'))}
               </>
             )}
 
-            {/* Tiendas regulares */}
-            {regulares.length > 0 && (
+            {/* Stadium */}
+            {stadium.length > 0 && (
               <>
-                <tr className="bg-gray-100/50 dark:bg-gray-800/50">
-                  <td colSpan={tallas.length * 2 + 3} className="px-2 py-1 text-[10px] font-bold text-gray-600 dark:text-gray-400 uppercase">
-                    Tiendas
+                <tr className="bg-blue-100/50 dark:bg-blue-900/20">
+                  <td colSpan={tallas.length * 2 + 3} className="px-2 py-1 text-[10px] font-bold text-blue-700 dark:text-blue-400 uppercase">
+                    Stadium
                   </td>
                 </tr>
-                {regulares.map(tienda => renderTiendaRow(tienda, false, false))}
+                {stadium.map(tienda => renderTiendaRow(tienda, 'stadium'))}
               </>
             )}
 
-            {/* Outlets */}
-            {outlets.length > 0 && (
+            {/* Miss Carol */}
+            {misscarol.length > 0 && (
+              <>
+                <tr className="bg-pink-100/50 dark:bg-pink-900/20">
+                  <td colSpan={tallas.length * 2 + 3} className="px-2 py-1 text-[10px] font-bold text-pink-700 dark:text-pink-400 uppercase">
+                    Miss Carol
+                  </td>
+                </tr>
+                {misscarol.map(tienda => renderTiendaRow(tienda, 'misscarol'))}
+              </>
+            )}
+
+            {/* Saldos (Outlet auxiliares) */}
+            {saldos.length > 0 && (
               <>
                 <tr className="bg-purple-100/50 dark:bg-purple-900/20">
                   <td colSpan={tallas.length * 2 + 3} className="px-2 py-1 text-[10px] font-bold text-purple-600 dark:text-purple-400 uppercase">
-                    Outlet
+                    Depósitos Saldos
                   </td>
                 </tr>
-                {outlets.map(tienda => renderTiendaRow(tienda, false, true))}
+                {saldos.map(tienda => renderTiendaRow(tienda, 'saldos'))}
               </>
             )}
 
-            {/* Tiendas Web (solo ventas, sin stock) */}
+            {/* Web (solo ventas, sin stock) */}
             {web.length > 0 && (
               <>
                 <tr className="bg-cyan-100/50 dark:bg-cyan-900/20">
@@ -251,7 +426,7 @@ export function UnifiedTallaTable({
                     Web (solo ventas)
                   </td>
                 </tr>
-                {web.map(tienda => renderTiendaRow(tienda, false, false, true))}
+                {web.map(tienda => renderTiendaRow(tienda, 'web'))}
               </>
             )}
           </tbody>
@@ -265,21 +440,110 @@ export function UnifiedTallaTable({
               {/* Totales Stock */}
               {tallas.map(talla => (
                 <td key={`total-stock-${talla}`} className="px-1.5 py-2 text-center text-xs font-bold text-gray-900 dark:text-white border-r border-gray-300 dark:border-gray-600">
-                  {totalesStock[talla] || '-'}
+                  <div className="flex items-center justify-center gap-0.5">
+                    <span>{totalesStock[talla]?.stock || '-'}</span>
+                    {totalesStock[talla]?.pendiente > 0 && (
+                      <span className="text-blue-500 dark:text-blue-400 text-[10px]">+{totalesStock[talla].pendiente}</span>
+                    )}
+                  </div>
                 </td>
               ))}
               <td className="px-2 py-2 text-center text-xs font-bold bg-blue-200 dark:bg-blue-800 text-blue-900 dark:text-blue-100 border-r-2 border-blue-300 dark:border-blue-700">
-                {totalStockGeneral}
+                <div className="flex items-center justify-center gap-0.5">
+                  <span>{totalStockGeneral}</span>
+                  {totalPendienteGeneral > 0 && (
+                    <span className="text-blue-600 dark:text-blue-300 text-[10px]">+{totalPendienteGeneral}</span>
+                  )}
+                </div>
               </td>
-              {/* Totales Ventas */}
-              {tallas.map(talla => (
-                <td key={`total-ventas-${talla}`} className="px-1.5 py-2 text-center text-xs font-bold text-gray-900 dark:text-white">
-                  {totalesVentas[talla] || '-'}
-                </td>
-              ))}
-              <td className="px-2 py-2 text-center text-xs font-bold bg-emerald-200 dark:bg-emerald-800 text-emerald-900 dark:text-emerald-100">
-                {totalVentasGeneral}
-              </td>
+              {/* Totales Ventas con Progress Bar */}
+              {tallas.map(talla => {
+                const data = sellThroughPorTalla[talla];
+                const colors = getSellThroughColor(data.sellThrough);
+                const hasData = data.comprado > 0;
+
+                return (
+                  <td
+                    key={`total-ventas-${talla}`}
+                    className="px-1.5 py-2 text-center text-xs font-bold relative group cursor-help"
+                    style={hasData ? {
+                      background: `linear-gradient(to right, ${colors.bar} ${data.sellThrough}%, transparent ${data.sellThrough}%)`
+                    } : undefined}
+                  >
+                    <span className={hasData ? colors.text : 'text-gray-900 dark:text-white'}>
+                      {data.ventas || '-'}
+                    </span>
+                    {/* Tooltip */}
+                    {hasData && (
+                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-[10px] rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex justify-between gap-3">
+                            <span className="text-gray-400 dark:text-gray-600">📦 Comprado:</span>
+                            <span className="font-bold">{data.comprado}</span>
+                          </div>
+                          <div className="flex justify-between gap-3">
+                            <span className="text-gray-400 dark:text-gray-600">📊 Stock:</span>
+                            <span className="font-bold">{data.stock}</span>
+                          </div>
+                          <div className="flex justify-between gap-3">
+                            <span className="text-gray-400 dark:text-gray-600">💰 Ventas:</span>
+                            <span className="font-bold">{data.ventas}</span>
+                          </div>
+                          <div className="border-t border-gray-700 dark:border-gray-300 mt-1 pt-1 flex justify-between gap-3">
+                            <span className="text-gray-400 dark:text-gray-600">📈 Sell-through:</span>
+                            <span className={`font-bold ${data.sellThrough >= 70 ? 'text-emerald-400' : data.sellThrough >= 40 ? 'text-amber-400' : 'text-red-400'}`}>
+                              {data.sellThrough.toFixed(0)}%
+                            </span>
+                          </div>
+                        </div>
+                        {/* Arrow */}
+                        <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900 dark:border-t-gray-100"></div>
+                      </div>
+                    )}
+                  </td>
+                );
+              })}
+              {/* Total General Ventas con Progress Bar */}
+              {(() => {
+                const colors = getSellThroughColor(sellThroughGeneral);
+                const compradoGeneral = totalStockGeneral + totalVentasGeneral;
+                return (
+                  <td
+                    className="px-2 py-2 text-center text-xs font-bold relative group cursor-help"
+                    style={{
+                      background: `linear-gradient(to right, ${colors.bar} ${sellThroughGeneral}%, rgba(16, 185, 129, 0.15) ${sellThroughGeneral}%)`
+                    }}
+                  >
+                    <span className={colors.text}>{totalVentasGeneral}</span>
+                    {/* Tooltip */}
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-[10px] rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-50">
+                      <div className="flex flex-col gap-0.5">
+                        <div className="font-bold text-center mb-1 text-[11px]">TOTAL GENERAL</div>
+                        <div className="flex justify-between gap-3">
+                          <span className="text-gray-400 dark:text-gray-600">📦 Comprado:</span>
+                          <span className="font-bold">{compradoGeneral}</span>
+                        </div>
+                        <div className="flex justify-between gap-3">
+                          <span className="text-gray-400 dark:text-gray-600">📊 Stock:</span>
+                          <span className="font-bold">{totalStockGeneral}</span>
+                        </div>
+                        <div className="flex justify-between gap-3">
+                          <span className="text-gray-400 dark:text-gray-600">💰 Ventas:</span>
+                          <span className="font-bold">{totalVentasGeneral}</span>
+                        </div>
+                        <div className="border-t border-gray-700 dark:border-gray-300 mt-1 pt-1 flex justify-between gap-3">
+                          <span className="text-gray-400 dark:text-gray-600">📈 Sell-through:</span>
+                          <span className={`font-bold ${sellThroughGeneral >= 70 ? 'text-emerald-400' : sellThroughGeneral >= 40 ? 'text-amber-400' : 'text-red-400'}`}>
+                            {sellThroughGeneral.toFixed(0)}%
+                          </span>
+                        </div>
+                      </div>
+                      {/* Arrow */}
+                      <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-gray-900 dark:border-t-gray-100"></div>
+                    </div>
+                  </td>
+                );
+              })()}
             </tr>
           </tfoot>
         </table>

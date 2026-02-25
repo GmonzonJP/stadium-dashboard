@@ -47,15 +47,20 @@ export async function calculateClusterElasticity(params: {
                 FORMAT(T.Fecha, 'yyyy-MM') as mes,
                 DATEPART(YEAR, T.Fecha) as year,
                 DATEPART(MONTH, T.Fecha) as month,
-                -- Precio promedio del mes (usar ArticuloPrecio si existe, sino calcular de transacciones)
+                -- Precio promedio del mes (usar PrecioLista de Articulos si existe, sino calcular de transacciones)
                 COALESCE(
-                    MAX(AP.Precio),
+                    MAX(ART_PVP.PVP),
                     CAST(SUM(T.Precio) / NULLIF(SUM(T.Cantidad), 0) as DECIMAL(18,2))
                 ) as precio_promedio,
                 SUM(T.Cantidad) as unidades_vendidas
             FROM Transacciones T
             INNER JOIN Articulos A ON A.Base = T.BaseCol
-            LEFT JOIN ArticuloPrecio AP ON AP.baseCol = T.BaseCol
+            LEFT JOIN (
+                SELECT Base as BaseCol, MAX(PrecioLista) as PVP
+                FROM Articulos
+                WHERE PrecioLista > 0
+                GROUP BY Base
+            ) ART_PVP ON ART_PVP.BaseCol = T.BaseCol
             WHERE T.IdClase = @idClase
             AND T.idGenero = @idGenero
             AND T.IdMarca = @idMarca
@@ -63,8 +68,8 @@ export async function calculateClusterElasticity(params: {
             AND T.Fecha <= @fechaFin
             AND T.Cantidad > 0
             AND (
-                AP.Precio IS NULL 
-                OR (AP.Precio >= @minPrice AND AP.Precio <= @maxPrice)
+                ART_PVP.PVP IS NULL
+                OR (ART_PVP.PVP >= @minPrice AND ART_PVP.PVP <= @maxPrice)
                 OR (T.Precio / NULLIF(T.Cantidad, 0) >= @minPrice AND T.Precio / NULLIF(T.Cantidad, 0) <= @maxPrice)
             )
             GROUP BY T.BaseCol, FORMAT(T.Fecha, 'yyyy-MM'), DATEPART(YEAR, T.Fecha), DATEPART(MONTH, T.Fecha)

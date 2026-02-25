@@ -1,12 +1,12 @@
 'use client';
 
 import React from 'react';
-import { Home, Store, Tags, LayoutGrid, Users, Truck, Sparkles, ChevronLeft, ChevronRight, BarChart2, MessageSquareText, TrendingDown, PieChart, Bell } from 'lucide-react';
+import { Home, Store, Tags, LayoutGrid, Users, Truck, ChevronLeft, ChevronRight, BarChart2, MessageSquareText, TrendingDown, PieChart, Bell } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-export type NavItemId = 'home' | 'tiendas' | 'marcas' | 'clases' | 'generos' | 'proveedores' | 'comparativo' | 'recompra' | 'price-actions' | 'stadiumgpt' | 'sell-out' | 'incidencias';
+export type NavItemId = 'home' | 'tiendas' | 'marcas' | 'clases' | 'generos' | 'proveedores' | 'comparativo' | 'price-actions' | 'stadiumgpt' | 'sell-out' | 'incidencias';
 
 const navItems: { icon: any, label: string, id: NavItemId, href?: string, highlight?: boolean, subtitle?: string, badge?: string }[] = [
     { icon: Home, label: 'General', id: 'home', href: '/' },
@@ -18,7 +18,6 @@ const navItems: { icon: any, label: string, id: NavItemId, href?: string, highli
     { icon: BarChart2, label: 'Comparativo', id: 'comparativo' },
     { icon: PieChart, label: 'Sell Out', id: 'sell-out', href: '/sell-out', subtitle: 'Análisis de rotación', badge: 'NEW' },
     { icon: Bell, label: 'Incidencias', id: 'incidencias', subtitle: 'Alertas del director' },
-    { icon: Sparkles, label: 'Recompra', id: 'recompra', href: '/recompra' },
     { icon: TrendingDown, label: 'Price Actions', id: 'price-actions', href: '/price-actions', subtitle: 'Gestión de precios' },
     { icon: MessageSquareText, label: 'StadiumGPT', id: 'stadiumgpt', href: '/chat', highlight: true, subtitle: 'Chatea con los datos' },
 ];

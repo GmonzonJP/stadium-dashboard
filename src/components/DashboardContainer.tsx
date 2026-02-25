@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { Sidebar, NavItemId } from './Sidebar';
 import { TopBar } from './TopBar';
 import { FilterPanel } from './FilterPanel';
+import { CategoryFilterPanel } from './CategoryFilterPanel';
 import { UserManagement } from './UserManagement';
 import { ChatPanel } from './ChatPanel';
 import { AboutDefinitions } from './AboutDefinitions';
@@ -44,14 +45,13 @@ export function DashboardContainer({
         switch (activeFilterId) {
             case 'tiendas': return { title: 'Seleccionar Tiendas', items: filterData.stores, category: 'stores' };
             case 'marcas': return { title: 'Seleccionar Marcas', items: filterData.brands, category: 'brands' };
-            case 'clases': return { title: 'Seleccionar Categorías', items: filterData.categories, category: 'categories' };
             case 'generos': return { title: 'Seleccionar Géneros', items: filterData.genders, category: 'genders' };
             case 'proveedores': return { title: 'Seleccionar Proveedores', items: filterData.suppliers, category: 'suppliers' };
             default: return null;
         }
     };
 
-    const activeData = getActiveFilterData();
+    const activeData = activeFilterId !== 'clases' ? getActiveFilterData() : null;
 
     return (
         <div className="min-h-screen overflow-x-hidden">
@@ -68,6 +68,37 @@ export function DashboardContainer({
                     </div>
                 </main>
             </div>
+
+            {activeFilterId === 'clases' && (
+                <CategoryFilterPanel
+                    isOpen={true}
+                    onClose={() => setActiveFilterId(null)}
+                    sections={filterData.sections}
+                    selectedIds={(selectedFilters.categories as number[]) || []}
+                    onToggle={(id) => toggleFilter('categories', id)}
+                    onToggleSection={(catIds, select, sectionId) => setSelectedFilters(prev => {
+                        const currentCats = (prev.categories as number[]) || [];
+                        const currentSections = (prev.sections as number[]) || [];
+                        let nextCats: number[];
+                        let nextSections: number[];
+                        if (select) {
+                            nextCats = Array.from(new Set([...currentCats, ...catIds]));
+                            nextSections = sectionId ? Array.from(new Set([...currentSections, sectionId])) : currentSections;
+                        } else {
+                            const removeSet = new Set(catIds);
+                            nextCats = currentCats.filter(id => !removeSet.has(id));
+                            nextSections = sectionId ? currentSections.filter(id => id !== sectionId) : currentSections;
+                        }
+                        return { ...prev, categories: nextCats, sections: nextSections };
+                    })}
+                    onSelectAll={() => setSelectedFilters(prev => ({
+                        ...prev,
+                        categories: filterData.categories.map(i => i.id),
+                        sections: filterData.sections.map(s => s.id)
+                    }))}
+                    onClear={() => setSelectedFilters(prev => ({ ...prev, categories: [], sections: [] }))}
+                />
+            )}
 
             {activeData && (
                 <FilterPanel

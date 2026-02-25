@@ -122,9 +122,9 @@ export async function POST(req: NextRequest) {
         const ytdLy = ytdLyResult.recordset[0] || { units: 0, sales: 0, costoVenta: 0 };
         const stock = stockResult.recordset[0]?.stock || 0;
 
-        // Calculate Margen (Margin) = (Precio - Costo) / Precio * 100
-        const calculateMargin = (sales: number, cost: number) => 
-            sales > 0 ? ((sales - cost) / sales) * 100 : null;
+        // Calculate Margen = (Venta / Costo) - 1, expresado en %
+        const calculateMargin = (sales: number, cost: number) =>
+            cost > 0 ? ((sales - cost) / cost) * 100 : null;
 
         // Calculate Markup = (Precio - Costo) / Costo * 100
         const calculateMarkup = (sales: number, cost: number) => 

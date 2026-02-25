@@ -1,8 +1,8 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { X, Store, Tags, LayoutGrid, Users, Truck, LucideIcon } from 'lucide-react';
-import { FilterParams, FilterData } from '@/types';
+import { FilterParams, FilterData, SectionItem } from '@/types';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface ActiveFiltersTagsProps {
@@ -35,30 +35,131 @@ const filterColors: Record<string, string> = {
     suppliers: 'bg-orange-500/10 text-orange-400 border-orange-500/20'
 };
 
-export function ActiveFiltersTags({ selectedFilters, filterData, onRemoveFilter }: ActiveFiltersTagsProps) {
-    const activeFilters: Array<{ category: keyof FilterParams; id: number; label: string; categoryLabel: string }> = [];
+interface TagItem {
+    category: keyof FilterParams;
+    id: number | string;
+    label: string;
+    categoryLabel: string;
+    // For collapsed section tags: all category IDs in the section
+    sectionCategoryIds?: number[];
+}
 
-    // Recopilar todos los filtros activos
-    (['stores', 'brands', 'categories', 'genders', 'suppliers'] as const).forEach(category => {
-        const ids = selectedFilters[category] || [];
-        const items = filterData[category] || [];
-        
-        ids.forEach(id => {
-            const item = items.find(i => i.id === id);
-            if (item) {
-                activeFilters.push({
-                    category,
-                    id,
-                    label: item.label,
-                    categoryLabel: filterLabels[category] || category
+export function ActiveFiltersTags({ selectedFilters, filterData, onRemoveFilter }: ActiveFiltersTagsProps) {
+    // Build category→section lookup
+    const categoryToSection = useMemo(() => {
+        const map = new Map<number, { sectionLabel: string; section: SectionItem }>();
+        filterData.sections?.forEach(s => {
+            s.categories.forEach(c => map.set(c.id, { sectionLabel: s.label, section: s }));
+        });
+        return map;
+    }, [filterData.sections]);
+
+    const activeFilters = useMemo(() => {
+        const tags: TagItem[] = [];
+        const selectedCategoryIds = selectedFilters.categories || [];
+
+        (['stores', 'brands', 'categories', 'genders', 'suppliers'] as const).forEach(category => {
+            if (category === 'categories') {
+                // Group selected categories by section for collapse logic
+                const sectionGroups = new Map<number, { section: SectionItem; selectedIds: number[] }>();
+                const ungrouped: number[] = [];
+
+                selectedCategoryIds.forEach(id => {
+                    const info = categoryToSection.get(id);
+                    if (info) {
+                        const group = sectionGroups.get(info.section.id);
+                        if (group) {
+                            group.selectedIds.push(id);
+                        } else {
+                            sectionGroups.set(info.section.id, {
+                                section: info.section,
+                                selectedIds: [id]
+                            });
+                        }
+                    } else {
+                        ungrouped.push(id);
+                    }
+                });
+
+                // For each section group, collapse if all categories are selected
+                sectionGroups.forEach(({ section, selectedIds }) => {
+                    if (selectedIds.length === section.categories.length) {
+                        // All selected → collapsed tag
+                        tags.push({
+                            category: 'categories',
+                            id: `section-${section.id}`,
+                            label: `${section.label} (todas)`,
+                            categoryLabel: filterLabels.categories,
+                            sectionCategoryIds: selectedIds
+                        });
+                    } else {
+                        // Individual tags with section prefix
+                        selectedIds.forEach(id => {
+                            const item = (filterData.categories || []).find(i => i.id === id);
+                            if (item) {
+                                const sectionLabel = categoryToSection.get(id)?.sectionLabel;
+                                tags.push({
+                                    category: 'categories',
+                                    id,
+                                    label: sectionLabel ? `${sectionLabel} > ${item.label}` : item.label,
+                                    categoryLabel: filterLabels.categories
+                                });
+                            }
+                        });
+                    }
+                });
+
+                // Ungrouped categories (no section info)
+                ungrouped.forEach(id => {
+                    const item = (filterData.categories || []).find(i => i.id === id);
+                    if (item) {
+                        tags.push({
+                            category: 'categories',
+                            id,
+                            label: item.label,
+                            categoryLabel: filterLabels.categories
+                        });
+                    }
+                });
+            } else {
+                const ids = selectedFilters[category] || [];
+                const items = filterData[category] || [];
+
+                ids.forEach(id => {
+                    const item = items.find(i => i.id === id);
+                    if (item) {
+                        tags.push({
+                            category,
+                            id,
+                            label: item.label,
+                            categoryLabel: filterLabels[category] || category
+                        });
+                    }
                 });
             }
         });
-    });
+
+        return tags;
+    }, [selectedFilters, filterData, categoryToSection]);
 
     if (activeFilters.length === 0) {
         return null;
     }
+
+    const handleRemove = (filter: TagItem) => {
+        if (filter.sectionCategoryIds) {
+            // Remove all categories in this section
+            filter.sectionCategoryIds.forEach(id => onRemoveFilter('categories', id));
+            // Also remove the section from sections filter
+            const sectionIdStr = String(filter.id).replace('section-', '');
+            const sectionId = Number(sectionIdStr);
+            if (!isNaN(sectionId)) {
+                onRemoveFilter('sections', sectionId);
+            }
+        } else {
+            onRemoveFilter(filter.category, filter.id as number);
+        }
+    };
 
     return (
         <div className="flex flex-wrap items-center gap-2 mt-3">
@@ -80,7 +181,7 @@ export function ActiveFiltersTags({ selectedFilters, filterData, onRemoveFilter 
                         </span>
                         <span className="font-medium">{filter.label}</span>
                         <button
-                            onClick={() => onRemoveFilter(filter.category, filter.id)}
+                            onClick={() => handleRemove(filter)}
                             className="ml-1 hover:bg-white/10 rounded-full p-0.5 transition-colors"
                             aria-label={`Eliminar filtro ${filter.label}`}
                         >

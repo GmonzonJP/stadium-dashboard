@@ -10,13 +10,15 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatPercent } from '@/lib/calculation-utils';
+import { exportToXlsx, ExportColumn } from '@/lib/export-xlsx';
 
 export function ProposalsQueue() {
     const [proposals, setProposals] = useState<PriceChangeProposal[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [page, setPage] = useState(1);
-    const [pageSize] = useState(25);
+    const [pageSize, setPageSize] = useState(25);
+    const PAGE_SIZE_OPTIONS = [25, 50, 100, 200];
     const [total, setTotal] = useState(0);
     const [totalPages, setTotalPages] = useState(0);
     const [selectedStatus, setSelectedStatus] = useState<ProposalStatus | 'all'>('all');
@@ -27,7 +29,12 @@ export function ProposalsQueue() {
 
     useEffect(() => {
         fetchProposals();
-    }, [page, selectedStatus, searchQuery]);
+    }, [page, pageSize, selectedStatus, searchQuery]);
+
+    // Reset page when pageSize changes
+    useEffect(() => {
+        setPage(1);
+    }, [pageSize]);
 
     const fetchProposals = async () => {
         setIsLoading(true);
@@ -152,31 +159,22 @@ export function ProposalsQueue() {
         }
     };
 
-    const handleExportExcel = async () => {
-        try {
-            const response = await fetch('/api/price-actions/export/excel', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    estado: selectedStatus !== 'all' ? [selectedStatus] : undefined
-                })
-            });
-
-            if (!response.ok) throw new Error('Error al exportar Excel');
-
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `price-actions-${new Date().toISOString().split('T')[0]}.xlsx`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            window.URL.revokeObjectURL(url);
-        } catch (err) {
-            console.error('Error exporting Excel:', err);
-            alert('Error al exportar Excel');
-        }
+    const handleExportExcel = () => {
+        const cols: ExportColumn<PriceChangeProposal>[] = [
+            { header: 'SKU', accessor: r => r.baseCol },
+            { header: 'Descripción', accessor: r => r.descripcionCorta || r.descripcion || '' },
+            { header: 'Categoría', accessor: r => r.categoria || '' },
+            { header: 'Marca', accessor: r => r.marca || '' },
+            { header: 'Tipo', accessor: r => r.usarPrecioAntesAhora ? 'Antes/Ahora' : 'Simple' },
+            { header: 'Precio Actual', accessor: r => r.precioActual },
+            { header: 'Precio Propuesto', accessor: r => r.precioPropuesto },
+            { header: 'Motivo', accessor: r => r.motivo },
+            { header: 'Sell-out Proy. %', accessor: r => r.sellOutProyectado != null ? Number((r.sellOutProyectado * 100).toFixed(1)) : '' },
+            { header: 'Margen Proy. $', accessor: r => r.margenTotalProyectado != null ? Math.round(r.margenTotalProyectado) : '' },
+            { header: 'Estado', accessor: r => r.estado },
+            { header: 'Notas', accessor: r => r.notas || '' },
+        ];
+        exportToXlsx(proposals, cols, 'propuestas-precios', 'Propuestas');
     };
 
     const getStatusColor = (status: ProposalStatus) => {
@@ -419,11 +417,25 @@ export function ProposalsQueue() {
                 </div>
 
                 {/* Pagination */}
-                {totalPages > 1 && (
-                    <div className="px-4 py-3 border-t border-slate-800 flex items-center justify-between">
+                <div className="px-4 py-3 border-t border-slate-800 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
                         <div className="text-sm text-slate-500">
                             Mostrando {((page - 1) * pageSize) + 1} - {Math.min(page * pageSize, total)} de {total}
                         </div>
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-slate-500">Mostrar:</span>
+                            <select
+                                value={pageSize}
+                                onChange={(e) => setPageSize(Number(e.target.value))}
+                                className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                            >
+                                {PAGE_SIZE_OPTIONS.map(size => (
+                                    <option key={size} value={size}>{size}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                    {totalPages > 1 && (
                         <div className="flex items-center space-x-2">
                             <button
                                 onClick={() => setPage(p => Math.max(1, p - 1))}
@@ -453,8 +465,8 @@ export function ProposalsQueue() {
                                 Siguiente
                             </button>
                         </div>
-                    </div>
-                )}
+                    )}
+                </div>
             </div>
 
             {proposals.length === 0 && !isLoading && (

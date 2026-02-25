@@ -222,6 +222,11 @@ export interface SellOutByProduct {
   esCarryover?: boolean;        // Producto que se vende todo el año
   primeraVentaGlobal?: Date | string | null; // Primera venta en toda la historia
 
+  // Nuevos campos
+  fechaUltimaCompra?: Date | string | null;
+  cantidadUltimaCompra?: number | null;
+  margen?: number | null;       // (ASP - Costo) / Costo * 100
+
   // Legacy
   esSaldo: boolean;
   pvp: number | null;

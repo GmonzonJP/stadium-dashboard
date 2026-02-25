@@ -328,7 +328,7 @@ Miss Carol, Adidas, Puma, Umbro, New Balance, Converse, Freeway, Tiffosi, Mini M
 
 ## FÓRMULAS:
 - Costo con IVA = Costo × 1.22 (o usar CostoFinal directamente)
-- Margen (%) = MargenPorc (ya calculado) o ((PRECIO - CostoFinal) / PRECIO × 100)
+- Margen (%) = MargenPorc (ya calculado) o ((PRECIO - CostoFinal) / CostoFinal × 100)
 - Ticket Promedio = Total Ventas / Total Unidades
 
 ## DATOS DEL CONTEXTO ACTUAL:

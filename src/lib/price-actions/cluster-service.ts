@@ -93,7 +93,12 @@ export async function calculateClusterRitmo(params: {
             MAX(T.Fecha) as ultima_venta
         FROM Transacciones T
         INNER JOIN Articulos A ON A.Base = T.BaseCol
-        LEFT JOIN ArticuloPrecio AP ON AP.baseCol = T.BaseCol
+        LEFT JOIN (
+            SELECT Base as BaseCol, MAX(PrecioLista) as PVP
+            FROM Articulos
+            WHERE PrecioLista > 0
+            GROUP BY Base
+        ) ART_PVP ON ART_PVP.BaseCol = T.BaseCol
         WHERE T.IdClase = @idClase
         AND T.idGenero = @idGenero
         AND T.IdMarca = @idMarca
@@ -101,8 +106,8 @@ export async function calculateClusterRitmo(params: {
         AND T.Fecha <= @fechaFin
         AND T.Cantidad > 0
         AND (
-            AP.Precio IS NULL 
-            OR (AP.Precio >= @minPrice AND AP.Precio <= @maxPrice)
+            ART_PVP.PVP IS NULL
+            OR (ART_PVP.PVP >= @minPrice AND ART_PVP.PVP <= @maxPrice)
             OR (T.Precio / NULLIF(T.Cantidad, 0) >= @minPrice AND T.Precio / NULLIF(T.Cantidad, 0) <= @maxPrice)
         )
         GROUP BY T.BaseCol
@@ -176,13 +181,18 @@ export async function getClusterSKUs(cluster: Cluster): Promise<string[]> {
         SELECT DISTINCT T.BaseCol
         FROM Transacciones T
         INNER JOIN Articulos A ON A.Base = T.BaseCol
-        LEFT JOIN ArticuloPrecio AP ON AP.baseCol = T.BaseCol
+        LEFT JOIN (
+            SELECT Base as BaseCol, MAX(PrecioLista) as PVP
+            FROM Articulos
+            WHERE PrecioLista > 0
+            GROUP BY Base
+        ) ART_PVP ON ART_PVP.BaseCol = T.BaseCol
         WHERE T.IdClase = @idClase
         AND T.idGenero = @idGenero
         AND T.IdMarca = @idMarca
         AND (
-            AP.Precio IS NULL 
-            OR (AP.Precio >= @minPrice AND AP.Precio <= @maxPrice)
+            ART_PVP.PVP IS NULL
+            OR (ART_PVP.PVP >= @minPrice AND ART_PVP.PVP <= @maxPrice)
         )
     `;
 

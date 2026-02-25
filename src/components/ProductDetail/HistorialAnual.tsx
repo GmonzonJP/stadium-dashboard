@@ -4,13 +4,15 @@ import React, { useState } from 'react';
 import { Calendar, TrendingDown, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
+import { exportToXlsx, ExportColumn } from '@/lib/export-xlsx';
+import { ExportButton } from '@/components/ExportButton';
 
 interface HistorialAnualData {
     temporada: string;  // "Invierno 2024", "Verano 2024"
     unidadesVendidas: number;
     importeVenta: number;
     precioPromedio: number;
-    margenPromedio: number | null;
+    markupPromedio: number | null; // Changed from margenPromedio to markupPromedio
     porcentajeVendido: number | null;
 }
 
@@ -19,6 +21,7 @@ interface HistorialAnualProps {
     temporadas: number;
     primeraCompraAnio: number | null;
     stockActual: number;
+    productName?: string;
 }
 
 // Determinar la temporada actual basada en la fecha
@@ -43,7 +46,8 @@ export function HistorialAnual({
     historial,
     temporadas,
     primeraCompraAnio,
-    stockActual
+    stockActual,
+    productName
 }: HistorialAnualProps) {
     const [isExpanded, setIsExpanded] = useState(true);
 
@@ -91,6 +95,22 @@ export function HistorialAnual({
                             {Math.abs(tendenciaVentas).toFixed(0)}%
                         </span>
                     )}
+                    <span onClick={(e) => e.stopPropagation()}>
+                        <ExportButton
+                            onClick={() => {
+                                const cols: ExportColumn<HistorialAnualData>[] = [
+                                    { header: 'Temporada', accessor: r => r.temporada },
+                                    { header: 'Unidades', accessor: r => r.unidadesVendidas },
+                                    { header: '% Vendido', accessor: r => r.porcentajeVendido != null ? Number(r.porcentajeVendido.toFixed(1)) : '' },
+                                    { header: 'Importe $', accessor: r => Math.round(r.importeVenta) },
+                                    { header: 'Precio Prom.', accessor: r => Math.round(r.precioPromedio) },
+                                    { header: 'Markup %', accessor: r => r.markupPromedio != null ? Number(r.markupPromedio.toFixed(1)) : '' },
+                                ];
+                                exportToXlsx(historial, cols, `historial${productName ? `-${productName}` : ''}`, 'Historial');
+                            }}
+                            disabled={historial.length === 0}
+                        />
+                    </span>
                     {isExpanded ? (
                         <ChevronUp className="w-5 h-5 text-slate-400" />
                     ) : (
@@ -149,15 +169,16 @@ export function HistorialAnual({
                                             <th className="text-right py-2 px-2 text-slate-400 font-medium">%</th>
                                             <th className="text-right py-2 px-2 text-slate-400 font-medium">Importe</th>
                                             <th className="text-right py-2 px-2 text-slate-400 font-medium">Precio Prom</th>
-                                            <th className="text-right py-2 px-2 text-slate-400 font-medium">Margen</th>
+                                            <th className="text-right py-2 px-2 text-slate-400 font-medium">Markup</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {historial.map((row, index) => {
                                             const esTemporadaActual = row.temporada === temporadaActual;
-                                            const margenColor = row.margenPromedio !== null
-                                                ? row.margenPromedio >= 30 ? 'text-emerald-400'
-                                                    : row.margenPromedio >= 15 ? 'text-yellow-400'
+                                            // Markup thresholds: >= 80% good, >= 30% warning, < 30% danger
+                                            const markupColor = row.markupPromedio !== null
+                                                ? row.markupPromedio >= 80 ? 'text-emerald-400'
+                                                    : row.markupPromedio >= 30 ? 'text-yellow-400'
                                                         : 'text-red-400'
                                                 : 'text-slate-500';
 
@@ -210,9 +231,9 @@ export function HistorialAnual({
                                                         </span>
                                                     </td>
                                                     <td className="py-2 px-2 text-right">
-                                                        {row.margenPromedio !== null ? (
-                                                            <span className={cn("tabular-nums font-medium", margenColor)}>
-                                                                {row.margenPromedio.toFixed(0)}%
+                                                        {row.markupPromedio !== null ? (
+                                                            <span className={cn("tabular-nums font-medium", markupColor)}>
+                                                                {row.markupPromedio.toFixed(0)}%
                                                             </span>
                                                         ) : (
                                                             <span className="text-slate-500">-</span>

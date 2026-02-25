@@ -85,9 +85,10 @@ export function calculateParesPorDia(
 }
 
 /**
- * Calcula el margen real
- * margen = (precio - costo) / precio * 100
- * @param precio - Precio de venta
+ * Calcula el margen
+ * margen = (precio / costo) - 1, expresado en %
+ * Ejemplo: Costo=100, Venta=150 → 50%
+ * @param precio - Precio de venta (ASP)
  * @param costo - Costo (con IVA si corresponde)
  * @returns Margen en porcentaje o null si no se puede calcular
  */
@@ -95,10 +96,10 @@ export function calculateMargen(
     precio: number | null | undefined,
     costo: number | null | undefined
 ): number | null {
-    if (precio == null || costo == null || precio === 0) {
+    if (precio == null || costo == null || costo === 0) {
         return null;
     }
-    return ((precio - costo) / precio) * 100;
+    return ((precio - costo) / costo) * 100;
 }
 
 /**

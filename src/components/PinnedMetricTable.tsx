@@ -5,6 +5,8 @@ import { useFilters } from '@/context/FilterContext';
 import { X, ArrowUpDown, ArrowUp, ArrowDown, Loader2, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { exportToXlsx, ExportColumn } from '@/lib/export-xlsx';
+import { ExportButton } from './ExportButton';
 
 interface PinnedMetricTableProps {
     id: string;
@@ -62,7 +64,7 @@ function ValueWithVariation({
     return (
         <div className="flex flex-col items-end">
             <span className={cn("tabular-nums font-semibold text-sm", valueColor)}>
-                {isMoney ? '$' : ''}{Math.round(value)?.toLocaleString()}
+                {isMoney ? '$ ' : ''}{Math.round(value)?.toLocaleString()}
             </span>
             {hasAnterior && variacion !== null && (
                 <span className={cn(
@@ -80,7 +82,7 @@ function ValueWithVariation({
 function ValueCell({ value, isMoney = false, color = "text-slate-500" }: { value: number; isMoney?: boolean; color?: string }) {
     return (
         <span className={cn("tabular-nums text-sm", color)}>
-            {isMoney ? '$' : ''}{Math.round(value)?.toLocaleString()}
+            {isMoney ? '$ ' : ''}{Math.round(value)?.toLocaleString()}
         </span>
     );
 }
@@ -221,12 +223,28 @@ export function PinnedMetricTable({ id, title, groupBy, groupByLabel, onClose, s
                         )}
                     </div>
                 </div>
-                <button
-                    onClick={() => onClose(id)}
-                    className="p-1.5 text-slate-500 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
-                >
-                    <X size={18} />
-                </button>
+                <div className="flex items-center gap-1">
+                    <ExportButton
+                        onClick={() => {
+                            const cols: ExportColumn<DataRow>[] = [
+                                { header: groupByLabel, accessor: r => r.label },
+                                ...(showComparison ? [{ header: 'Unid. Ant.', accessor: (r: DataRow) => r.unitsAnterior ?? '' }] : []),
+                                { header: 'Unidades', accessor: r => r.units },
+                                ...(showComparison ? [{ header: 'Ventas Ant. $', accessor: (r: DataRow) => r.salesAnterior != null ? Math.round(r.salesAnterior) : '' }] : []),
+                                { header: 'Ventas $', accessor: r => Math.round(r.sales) },
+                                { header: 'Utilidad %', accessor: r => Number(r.utility.toFixed(1)) },
+                            ];
+                            exportToXlsx(sortedData, cols, `metricas-${groupByLabel.toLowerCase()}`, groupByLabel);
+                        }}
+                        disabled={data.length === 0}
+                    />
+                    <button
+                        onClick={() => onClose(id)}
+                        className="p-1.5 text-slate-500 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                    >
+                        <X size={18} />
+                    </button>
+                </div>
             </div>
 
             <div className="overflow-x-auto max-h-[1200px] custom-scrollbar">
@@ -253,6 +271,9 @@ export function PinnedMetricTable({ id, title, groupBy, groupByLabel, onClose, s
                                         )}
                                     </button>
                                 </th>
+                                {hasAnyComparison && !isStockMetric && (
+                                    <th className="p-2 font-semibold text-slate-500 uppercase text-[10px] text-right">Ant Uds</th>
+                                )}
                                 <th className="p-2 font-semibold text-slate-400 uppercase text-[10px] text-right">
                                     <button
                                         onClick={() => handleSort('units')}
@@ -266,11 +287,11 @@ export function PinnedMetricTable({ id, title, groupBy, groupByLabel, onClose, s
                                         )}
                                     </button>
                                 </th>
-                                {hasAnyComparison && !isStockMetric && (
-                                    <th className="p-2 font-semibold text-slate-500 uppercase text-[10px] text-right">Ant</th>
-                                )}
                                 {!isStockMetric && (
                                     <>
+                                        {hasAnyComparison && (
+                                            <th className="p-2 font-semibold text-slate-500 uppercase text-[10px] text-right">Ant $</th>
+                                        )}
                                         <th className="p-2 font-semibold text-slate-400 uppercase text-[10px] text-right">
                                             <button
                                                 onClick={() => handleSort('sales')}
@@ -284,9 +305,6 @@ export function PinnedMetricTable({ id, title, groupBy, groupByLabel, onClose, s
                                                 )}
                                             </button>
                                         </th>
-                                        {hasAnyComparison && (
-                                            <th className="p-2 font-semibold text-slate-500 uppercase text-[10px] text-right">Ant</th>
-                                        )}
                                         <th className="p-2 font-semibold text-slate-400 uppercase text-[10px] text-right">
                                             <button
                                                 onClick={() => handleSort('utility')}
@@ -308,6 +326,11 @@ export function PinnedMetricTable({ id, title, groupBy, groupByLabel, onClose, s
                             {sortedData.map((item, idx) => (
                                 <tr key={idx} className="hover:bg-slate-800/20 transition-colors">
                                     <td className="p-2 text-white font-medium truncate max-w-[140px] text-sm">{item.label || 'N/A'}</td>
+                                    {hasAnyComparison && !isStockMetric && (
+                                        <td className="p-2 text-right">
+                                            <ValueCell value={item.unitsAnterior || 0} />
+                                        </td>
+                                    )}
                                     <td className="p-2 text-right">
                                         {isStockMetric ? (
                                             <ValueCell value={item.units} color="text-cyan-400" />
@@ -315,21 +338,16 @@ export function PinnedMetricTable({ id, title, groupBy, groupByLabel, onClose, s
                                             <ValueWithVariation value={item.units} anterior={item.unitsAnterior} />
                                         )}
                                     </td>
-                                    {hasAnyComparison && !isStockMetric && (
-                                        <td className="p-2 text-right">
-                                            <ValueCell value={item.unitsAnterior || 0} />
-                                        </td>
-                                    )}
                                     {!isStockMetric && (
                                         <>
-                                            <td className="p-2 text-right">
-                                                <ValueWithVariation value={item.sales} anterior={item.salesAnterior} isMoney />
-                                            </td>
                                             {hasAnyComparison && (
                                                 <td className="p-2 text-right">
                                                     <ValueCell value={item.salesAnterior || 0} isMoney />
                                                 </td>
                                             )}
+                                            <td className="p-2 text-right">
+                                                <ValueWithVariation value={item.sales} anterior={item.salesAnterior} isMoney />
+                                            </td>
                                             <td className="p-2 text-right tabular-nums text-sm">
                                                 <span className={item.utility >= 0 ? "text-emerald-500" : "text-red-500"}>
                                                     {Math.round(item.utility)}%
@@ -343,6 +361,11 @@ export function PinnedMetricTable({ id, title, groupBy, groupByLabel, onClose, s
                         <tfoot className="bg-slate-800/20 font-bold border-t border-slate-800 sticky bottom-0">
                             <tr>
                                 <td className="p-2 text-slate-400 text-sm">TOTAL</td>
+                                {hasAnyComparison && !isStockMetric && (
+                                    <td className="p-2 text-right">
+                                        <ValueCell value={totalUnitsAnterior} />
+                                    </td>
+                                )}
                                 <td className="p-2 text-right">
                                     {isStockMetric ? (
                                         <span className="tabular-nums font-bold text-sm text-cyan-400">{Math.round(totalUnits).toLocaleString()}</span>
@@ -350,21 +373,16 @@ export function PinnedMetricTable({ id, title, groupBy, groupByLabel, onClose, s
                                         <ValueWithVariation value={totalUnits} anterior={totalUnitsAnterior} colorNeutral="text-white" />
                                     )}
                                 </td>
-                                {hasAnyComparison && !isStockMetric && (
-                                    <td className="p-2 text-right">
-                                        <ValueCell value={totalUnitsAnterior} />
-                                    </td>
-                                )}
                                 {!isStockMetric && (
                                     <>
-                                        <td className="p-2 text-right">
-                                            <ValueWithVariation value={totalSales} anterior={totalSalesAnterior} isMoney />
-                                        </td>
                                         {hasAnyComparison && (
                                             <td className="p-2 text-right">
                                                 <ValueCell value={totalSalesAnterior} isMoney />
                                             </td>
                                         )}
+                                        <td className="p-2 text-right">
+                                            <ValueWithVariation value={totalSales} anterior={totalSalesAnterior} isMoney />
+                                        </td>
                                         <td className="p-2"></td>
                                     </>
                                 )}

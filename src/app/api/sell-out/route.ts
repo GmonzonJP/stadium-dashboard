@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
           MAX(T.PRECIO / NULLIF(T.Cantidad, 0)) as MaxPrecioUnitario
         FROM Transacciones T
         WHERE T.Cantidad > 0
-          AND T.IdSucursal NOT IN (${webStoreIds})
+          AND T.IdDeposito NOT IN (${webStoreIds})
         {WHERE_CLAUSE}
         GROUP BY T.BaseCol, T.IdMarca
       ),
@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
         ) UCI ON T.BaseCol = UCI.BaseCol
         WHERE T.Fecha >= UCI.FechaUltimaCompra
           AND T.Cantidad > 0
-          AND T.IdSucursal NOT IN (${webStoreIds})
+          AND T.IdDeposito NOT IN (${webStoreIds})
         GROUP BY T.BaseCol
       ),
       VentasDesdeCompra AS (
@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
         ) UCI ON T.BaseCol = UCI.BaseCol
         WHERE T.Fecha >= UCI.FechaUltimaCompra
           AND T.Cantidad > 0
-          AND T.IdSucursal NOT IN (${webStoreIds})
+          AND T.IdDeposito NOT IN (${webStoreIds})
         GROUP BY T.BaseCol
       ),
       Ventas180Dias AS (
@@ -117,16 +117,17 @@ export async function POST(request: NextRequest) {
         FROM Transacciones T
         WHERE T.Fecha >= DATEADD(DAY, -180, GETDATE())
           AND T.Cantidad > 0
-          AND T.IdSucursal NOT IN (${webStoreIds})
+          AND T.IdDeposito NOT IN (${webStoreIds})
         GROUP BY T.BaseCol
       )
       ,
       PrecioVenta AS (
         SELECT
-          baseCol as BaseCol,
-          MAX(Precio) as PVP
-        FROM ArticuloPrecio
-        GROUP BY baseCol
+          Base as BaseCol,
+          MAX(PrecioLista) as PVP
+        FROM Articulos
+        WHERE PrecioLista > 0
+        GROUP BY Base
       ),
       PrimeraVentaGlobal AS (
         -- Primera venta del producto en toda la historia (para detectar carryover)
@@ -136,7 +137,7 @@ export async function POST(request: NextRequest) {
           MIN(T.Fecha) as PrimeraVentaGlobal
         FROM Transacciones T
         WHERE T.Cantidad > 0
-          AND T.IdSucursal NOT IN (${webStoreIds})
+          AND T.IdDeposito NOT IN (${webStoreIds})
         GROUP BY T.BaseCol
       )
       SELECT
@@ -174,9 +175,9 @@ export async function POST(request: NextRequest) {
     `;
 
     // Build AND conditions for filters (to append to existing WHERE clause)
+    // IMPORTANT: Date filters intentionally excluded — sell-out classification
+    // evaluates each product from its última compra date, independent of date range.
     const andClauses: string[] = [];
-    if (startDate) andClauses.push(`T.Fecha >= '${startDate}'`);
-    if (endDate) andClauses.push(`T.Fecha <= '${endDate}'`);
     if (stores?.length) andClauses.push(`T.IdDeposito IN (${stores.join(',')})`);
     if (brands?.length) andClauses.push(`T.IdMarca IN (${brands.join(',')})`);
     if (categories?.length) andClauses.push(`T.IdClase IN (${categories.join(',')})`);
@@ -199,16 +200,25 @@ export async function POST(request: NextRequest) {
 
     const productosParaClasificar: ProductoParaClasificar[] = rawProducts.map((row: any) => {
       const esCarryover = row.EsCarryover === 1;
+      const stockActual = row.StockTotal || 0;
+      const esSaldoProducto = stockActual > 0 && stockActual < 30;
 
-      // Para carryover: usar 180 días
+      // Para carryover CON stock relevante: usar 180 días
+      // Para carryover SALDO (stock < 30): usar desde última compra
+      //   → Porque la baja velocidad reciente se debe a que ya no hay stock, no a que no vende
       // Para estacionales: usar días desde última compra
-      const unidadesParaClasificar = esCarryover
-        ? (row.Unidades180Dias || row.UnidadesVendidas || 0)
-        : (row.UnidadesDesdeCompra || row.UnidadesVendidas || 0);
+      let unidadesParaClasificar: number;
+      let diasParaClasificar: number;
 
-      const diasParaClasificar = esCarryover
-        ? VENTANA_CARRYOVER
-        : (row.DiasDesdeUltimaCompra || row.DiasDesde1raVentaUltimaCompra || 0);
+      if (esCarryover && !esSaldoProducto) {
+        // Carryover con stock relevante: ventana de 180 días
+        unidadesParaClasificar = row.Unidades180Dias || row.UnidadesVendidas || 0;
+        diasParaClasificar = VENTANA_CARRYOVER;
+      } else {
+        // Estacional O carryover-saldo: desde última compra
+        unidadesParaClasificar = row.UnidadesDesdeCompra || row.UnidadesVendidas || 0;
+        diasParaClasificar = row.DiasDesdeUltimaCompra || row.DiasDesde1raVentaUltimaCompra || 0;
+      }
 
       return {
         BaseCol: row.BaseCol,
@@ -257,6 +267,15 @@ export async function POST(request: NextRequest) {
         // Tipo de producto
         esCarryover: productoClasificado.esCarryover || false,
         primeraVentaGlobal: raw.PrimeraVentaGlobal || null,
+        // Nuevos campos
+        fechaUltimaCompra: raw.FechaUltimaCompra || null,
+        cantidadUltimaCompra: raw.CantidadUltimaCompra || null,
+        margen: (() => {
+          const asp = raw.UnidadesVendidas > 0 ? raw.VentaTotal / raw.UnidadesVendidas : null;
+          const costo = raw.UltimoCosto || null;
+          if (asp && costo && costo > 0) return ((asp - costo) / costo) * 100;
+          return null;
+        })(),
         // Legacy
         esSaldo: p.esSaldo,
         pvp: raw.PVP || null,
