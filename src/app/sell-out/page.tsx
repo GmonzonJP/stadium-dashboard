@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import {
   BarChart2,
@@ -25,6 +25,7 @@ import { AddToPriceQueueModal } from '@/components/AddToPriceQueueModal';
 import { getProductImageUrl } from '@/lib/utils';
 import { exportToXlsx, exportMultiSheet, ExportColumn } from '@/lib/export-xlsx';
 import { ExportButton } from '@/components/ExportButton';
+import { SmartColumnHeader, ColumnSort, ColumnFilter } from '@/components/SmartColumnHeader';
 
 type TabId = 'marca' | 'producto' | 'fast-movers' | 'slow-movers' | 'clavos' | 'saldos';
 
@@ -120,6 +121,47 @@ export default function SellOutPage() {
     precioActual: number;
     precioNuevo: number;
   } | null>(null);
+
+  // Column sort/filter state for product tables
+  const [productSort, setProductSort] = useState<ColumnSort | null>(null);
+  const [productFilters, setProductFilters] = useState<Map<string, Set<string>>>(new Map());
+  // Column sort/filter state for brand table
+  const [brandSort, setBrandSort] = useState<ColumnSort | null>(null);
+  const [brandFilters, setBrandFilters] = useState<Map<string, Set<string>>>(new Map());
+
+  const handleProductSort = useCallback((key: string, direction: 'asc' | 'desc' | null) => {
+    setProductSort(direction ? { key, direction } : null);
+  }, []);
+
+  const handleProductFilter = useCallback((key: string, values: Set<string>) => {
+    setProductFilters(prev => {
+      const next = new Map(prev);
+      if (values.size === 0) next.delete(key);
+      else next.set(key, values);
+      return next;
+    });
+  }, []);
+
+  const handleBrandSort = useCallback((key: string, direction: 'asc' | 'desc' | null) => {
+    setBrandSort(direction ? { key, direction } : null);
+  }, []);
+
+  const handleBrandFilter = useCallback((key: string, values: Set<string>) => {
+    setBrandFilters(prev => {
+      const next = new Map(prev);
+      if (values.size === 0) next.delete(key);
+      else next.set(key, values);
+      return next;
+    });
+  }, []);
+
+  // Reset sort/filters when tab changes
+  useEffect(() => {
+    setProductSort(null);
+    setProductFilters(new Map());
+    setBrandSort(null);
+    setBrandFilters(new Map());
+  }, [activeTab]);
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -306,137 +348,309 @@ export default function SellOutPage() {
     );
   };
 
+  // Brand table helpers
+  const getBrandSortValue = (m: SellOutByBrand, key: string): number | string => {
+    switch (key) {
+      case 'marca': return m.descripcionMarca;
+      case 'productos': return m.cantidadProductos;
+      case 'unidades': return m.totalUnidades;
+      case 'venta': return m.totalVenta;
+      case 'stock': return m.totalStock;
+      case 'fast': return m.cantidadFastMovers;
+      case 'ok': return m.cantidadOK;
+      case 'slow': return m.cantidadSlowMovers;
+      case 'clavo': return m.cantidadClavos;
+      case 'pctSlow': return m.porcentajeSlowMovers;
+      default: return 0;
+    }
+  };
+
+  const applyBrandFiltersAndSort = (brands: SellOutByBrand[]): SellOutByBrand[] => {
+    let result = [...brands];
+    Array.from(brandFilters.entries()).forEach(([key, values]) => {
+      if (key === 'marca') result = result.filter(m => values.has(m.descripcionMarca));
+    });
+    if (brandSort && brandSort.direction) {
+      const { key, direction } = brandSort;
+      result.sort((a, b) => {
+        const va = getBrandSortValue(a, key);
+        const vb = getBrandSortValue(b, key);
+        const cmp = typeof va === 'string' ? va.localeCompare(vb as string, 'es') : (va as number) - (vb as number);
+        return direction === 'asc' ? cmp : -cmp;
+      });
+    }
+    return result;
+  };
+
   const renderMarcaTab = () => {
     if (!data) return null;
 
+    const brands = applyBrandFiltersAndSort(data.byBrand);
+    const hasActiveFilters = brandFilters.size > 0 || brandSort !== null;
+    const brandNames = data.byBrand.map(b => b.descripcionMarca).sort((a, b) => a.localeCompare(b, 'es'));
+
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-gray-50 dark:bg-gray-700">
-            <tr>
-              <th className="px-4 py-3 text-left text-sm font-semibold">Marca</th>
-              <th className="px-4 py-3 text-right text-sm font-semibold">Productos</th>
-              <th className="px-4 py-3 text-right text-sm font-semibold">Unidades</th>
-              <th className="px-4 py-3 text-right text-sm font-semibold">Venta</th>
-              <th className="px-4 py-3 text-right text-sm font-semibold">Stock</th>
-              <th className="px-4 py-3 text-center text-sm font-semibold">Fast</th>
-              <th className="px-4 py-3 text-center text-sm font-semibold">OK</th>
-              <th className="px-4 py-3 text-center text-sm font-semibold">Slow</th>
-              <th className="px-4 py-3 text-center text-sm font-semibold">Clavo</th>
-              <th className="px-4 py-3 text-right text-sm font-semibold">% Slow</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-            {data.byBrand.map((marca) => (
-              <React.Fragment key={marca.idMarca}>
-                <tr
-                  className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
-                  onClick={() => setExpandedBrand(expandedBrand === marca.idMarca ? null : marca.idMarca)}
-                >
-                  <td className="px-4 py-3 font-medium">{marca.descripcionMarca}</td>
-                  <td className="px-4 py-3 text-right">{marca.cantidadProductos}</td>
-                  <td className="px-4 py-3 text-right">{formatNumber(marca.totalUnidades)}</td>
-                  <td className="px-4 py-3 text-right">{formatCurrency(marca.totalVenta)}</td>
-                  <td className="px-4 py-3 text-right">{formatNumber(marca.totalStock)}</td>
-                  <td className="px-4 py-3 text-center text-emerald-600">{marca.cantidadFastMovers}</td>
-                  <td className="px-4 py-3 text-center text-blue-600">{marca.cantidadOK}</td>
-                  <td className="px-4 py-3 text-center text-amber-600">{marca.cantidadSlowMovers}</td>
-                  <td className="px-4 py-3 text-center text-red-600">{marca.cantidadClavos}</td>
-                  <td className={`px-4 py-3 text-right font-medium ${
-                    marca.porcentajeSlowMovers > 30 ? 'text-red-600 dark:text-red-400' :
-                    marca.porcentajeSlowMovers > 15 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-600 dark:text-gray-400'
-                  }`}>
-                    {marca.porcentajeSlowMovers.toFixed(1)}%
-                  </td>
-                </tr>
-                {expandedBrand === marca.idMarca && (
-                  <tr>
-                    <td colSpan={13} className="bg-gray-50 dark:bg-gray-700/30 px-4 py-2">
-                      <div className="text-sm text-gray-500 mb-2">
-                        Productos de {marca.descripcionMarca}:
-                      </div>
-                      <div className="max-h-60 overflow-auto">
-                        <table className="w-full text-sm">
-                          <tbody>
-                            {data.byProduct
-                              .filter(p => p.descripcionMarca === marca.descripcionMarca)
-                              .slice(0, 20)
-                              .map((p) => (
-                                <tr
-                                  key={p.BaseCol}
-                                  className="border-b dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600/50 cursor-pointer"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedProductId(p.BaseCol);
-                                  }}
-                                >
-                                  <td className="py-2 w-12">
-                                    <img
-                                      src={getProductImageUrl(p.BaseCol)}
-                                      alt={p.descripcionCorta}
-                                      className="w-10 h-10 object-cover rounded"
-                                      onError={(e) => {
-                                        e.currentTarget.src = 'https://placehold.co/40x40/1e293b/475569?text=IMG';
-                                      }}
-                                    />
-                                  </td>
-                                  <td className="py-2 font-mono">{p.BaseCol}</td>
-                                  <td className="py-2">{p.descripcionCorta}</td>
-                                  <td className="py-2 text-right">{p.stockTotal}</td>
-                                  <td className="py-2">
-                                    <ProductStatusBadge estado={p.estado} size="sm" />
-                                  </td>
-                                </tr>
-                              ))}
-                          </tbody>
-                        </table>
-                      </div>
+      <div className="bg-white dark:bg-slate-900/50 rounded-lg dark:rounded-3xl shadow-sm dark:shadow-2xl overflow-hidden dark:border dark:border-slate-800">
+        {hasActiveFilters && (
+          <div className="px-4 py-3 border-b dark:border-slate-800 flex items-center justify-between">
+            <h3 className="font-semibold text-gray-900 dark:text-white">
+              Por Marca
+              {brandFilters.size > 0 && (
+                <span className="ml-2 text-xs font-normal text-blue-500">
+                  ({brands.length} de {data.byBrand.length})
+                </span>
+              )}
+            </h3>
+            <button
+              onClick={() => { setBrandSort(null); setBrandFilters(new Map()); }}
+              className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+            >
+              <X size={12} />
+              Limpiar filtros
+            </button>
+          </div>
+        )}
+        <div className="max-h-[75vh] overflow-auto">
+          <table className="w-full">
+            <thead className="bg-[#0c1425] sticky top-0 z-20 shadow-[0_2px_8px_rgba(0,0,0,0.3)]">
+              <tr className="border-b-2 border-blue-500/30">
+                <SmartColumnHeader label="Marca" columnKey="marca" align="left" sortable filterable
+                  currentSort={brandSort} onSort={handleBrandSort}
+                  filterValues={brandNames}
+                  activeFilter={brandFilters.get('marca')} onFilter={handleBrandFilter} />
+                <SmartColumnHeader label="Productos" columnKey="productos" align="right"
+                  currentSort={brandSort} onSort={handleBrandSort} />
+                <SmartColumnHeader label="Unidades" columnKey="unidades" align="right"
+                  currentSort={brandSort} onSort={handleBrandSort} />
+                <SmartColumnHeader label="Venta" columnKey="venta" align="right"
+                  currentSort={brandSort} onSort={handleBrandSort} />
+                <SmartColumnHeader label="Stock" columnKey="stock" align="right"
+                  currentSort={brandSort} onSort={handleBrandSort} />
+                <SmartColumnHeader label="Fast" columnKey="fast" align="center"
+                  currentSort={brandSort} onSort={handleBrandSort} />
+                <SmartColumnHeader label="OK" columnKey="ok" align="center"
+                  currentSort={brandSort} onSort={handleBrandSort} />
+                <SmartColumnHeader label="Slow" columnKey="slow" align="center"
+                  currentSort={brandSort} onSort={handleBrandSort} />
+                <SmartColumnHeader label="Clavo" columnKey="clavo" align="center"
+                  currentSort={brandSort} onSort={handleBrandSort} />
+                <SmartColumnHeader label="% Slow" columnKey="pctSlow" align="right"
+                  currentSort={brandSort} onSort={handleBrandSort} />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+              {brands.map((marca) => (
+                <React.Fragment key={marca.idMarca}>
+                  <tr
+                    className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
+                    onClick={() => setExpandedBrand(expandedBrand === marca.idMarca ? null : marca.idMarca)}
+                  >
+                    <td className="px-4 py-3 font-medium">{marca.descripcionMarca}</td>
+                    <td className="px-4 py-3 text-right">{marca.cantidadProductos}</td>
+                    <td className="px-4 py-3 text-right">{formatNumber(marca.totalUnidades)}</td>
+                    <td className="px-4 py-3 text-right">{formatCurrency(marca.totalVenta)}</td>
+                    <td className="px-4 py-3 text-right">{formatNumber(marca.totalStock)}</td>
+                    <td className="px-4 py-3 text-center text-emerald-600">{marca.cantidadFastMovers}</td>
+                    <td className="px-4 py-3 text-center text-blue-600">{marca.cantidadOK}</td>
+                    <td className="px-4 py-3 text-center text-amber-600">{marca.cantidadSlowMovers}</td>
+                    <td className="px-4 py-3 text-center text-red-600">{marca.cantidadClavos}</td>
+                    <td className={`px-4 py-3 text-right font-medium ${
+                      marca.porcentajeSlowMovers > 30 ? 'text-red-600 dark:text-red-400' :
+                      marca.porcentajeSlowMovers > 15 ? 'text-amber-600 dark:text-amber-400' : 'text-gray-600 dark:text-gray-400'
+                    }`}>
+                      {marca.porcentajeSlowMovers.toFixed(1)}%
                     </td>
                   </tr>
-                )}
-              </React.Fragment>
-            ))}
-          </tbody>
-        </table>
+                  {expandedBrand === marca.idMarca && (
+                    <tr>
+                      <td colSpan={10} className="bg-gray-50 dark:bg-gray-700/30 px-4 py-2">
+                        <div className="text-sm text-gray-500 mb-2">
+                          Productos de {marca.descripcionMarca}:
+                        </div>
+                        <div className="max-h-60 overflow-auto">
+                          <table className="w-full text-sm">
+                            <tbody>
+                              {data.byProduct
+                                .filter(p => p.descripcionMarca === marca.descripcionMarca)
+                                .slice(0, 20)
+                                .map((p) => (
+                                  <tr
+                                    key={p.BaseCol}
+                                    className="border-b dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-600/50 cursor-pointer"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setSelectedProductId(p.BaseCol);
+                                    }}
+                                  >
+                                    <td className="py-2 w-12">
+                                      <img
+                                        src={getProductImageUrl(p.BaseCol)}
+                                        alt={p.descripcionCorta}
+                                        className="w-10 h-10 object-cover rounded"
+                                        onError={(e) => {
+                                          e.currentTarget.src = 'https://placehold.co/40x40/1e293b/475569?text=IMG';
+                                        }}
+                                      />
+                                    </td>
+                                    <td className="py-2 font-mono">{p.BaseCol}</td>
+                                    <td className="py-2">{p.descripcionCorta}</td>
+                                    <td className="py-2 text-right">{p.stockTotal}</td>
+                                    <td className="py-2">
+                                      <ProductStatusBadge estado={p.estado} size="sm" />
+                                    </td>
+                                  </tr>
+                                ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              ))}
+              {brands.length === 0 && (
+                <tr>
+                  <td colSpan={10} className="px-4 py-12 text-center text-gray-400 dark:text-slate-500">
+                    No hay marcas que coincidan con los filtros aplicados
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     );
   };
 
+  // Helper: get string value for filtering from a product row
+  const getProductFilterValue = (p: SellOutByProduct, key: string): string => {
+    switch (key) {
+      case 'marca': return p.descripcionMarca || '';
+      case 'estado': return p.estado;
+      default: return '';
+    }
+  };
+
+  // Helper: get numeric/string value for sorting from a product row
+  const getProductSortValue = (p: SellOutByProduct, key: string): number | string => {
+    switch (key) {
+      case 'marca': return p.descripcionMarca || '';
+      case 'descripcion': return p.descripcionCorta || '';
+      case 'unidades': return p.unidadesPeriodo ?? p.unidadesVendidas;
+      case 'stock': return p.stockTotal;
+      case 'costo': return p.ultimoCosto || 0;
+      case 'pvp': return p.pvp || 0;
+      case 'venta': return p.ventaTotal;
+      case 'margen': return p.margen ?? -9999;
+      case 'parDia': return p.paresPorDia ?? -9999;
+      case 'diasStock': return p.diasStock ?? 999999;
+      case 'ultCompra': return p.fechaUltimaCompra ? new Date(p.fechaUltimaCompra as string).getTime() : 0;
+      case 'estado': return p.estado;
+      default: return 0;
+    }
+  };
+
+  // Apply filters and sort to product list
+  const applyProductFiltersAndSort = (productos: SellOutByProduct[]): SellOutByProduct[] => {
+    let result = [...productos];
+
+    // Apply filters
+    Array.from(productFilters.entries()).forEach(([key, values]) => {
+      result = result.filter(p => values.has(getProductFilterValue(p, key)));
+    });
+
+    // Apply sort
+    if (productSort && productSort.direction) {
+      const { key, direction } = productSort;
+      result.sort((a, b) => {
+        const va = getProductSortValue(a, key);
+        const vb = getProductSortValue(b, key);
+        const cmp = typeof va === 'string' ? va.localeCompare(vb as string, 'es') : (va as number) - (vb as number);
+        return direction === 'asc' ? cmp : -cmp;
+      });
+    }
+
+    return result;
+  };
+
+  // Get unique values for product filter dropdowns
+  const getProductUniqueValues = (productos: SellOutByProduct[], key: string): string[] => {
+    const vals = new Set<string>();
+    for (const p of productos) {
+      const v = getProductFilterValue(p, key);
+      if (v) vals.add(v);
+    }
+    return Array.from(vals).sort((a, b) => a.localeCompare(b, 'es'));
+  };
+
   const renderProductoTab = (productos: SellOutByProduct[], title?: string) => {
+    const processed = applyProductFiltersAndSort(productos);
+    const hasActiveFilters = productFilters.size > 0 || productSort !== null;
+
     return (
       <div className="bg-white dark:bg-slate-900/50 rounded-lg dark:rounded-3xl shadow-sm dark:shadow-2xl overflow-hidden dark:border dark:border-slate-800">
-        {title && (
-          <div className="px-4 py-3 border-b dark:border-slate-800">
-            <h3 className="font-semibold text-gray-900 dark:text-white">{title}</h3>
+        {(title || hasActiveFilters) && (
+          <div className="px-4 py-3 border-b dark:border-slate-800 flex items-center justify-between">
+            <h3 className="font-semibold text-gray-900 dark:text-white">
+              {title || 'Productos'}
+              {productFilters.size > 0 && (
+                <span className="ml-2 text-xs font-normal text-blue-500">
+                  ({processed.length} de {productos.length})
+                </span>
+              )}
+            </h3>
+            {hasActiveFilters && (
+              <button
+                onClick={() => { setProductSort(null); setProductFilters(new Map()); }}
+                className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+              >
+                <X size={12} />
+                Limpiar filtros
+              </button>
+            )}
           </div>
         )}
-        <div className="max-h-[600px] overflow-auto">
+        <div className="max-h-[75vh] overflow-auto">
           <table className="w-full min-w-[1200px]">
-            <thead className="bg-gray-50 dark:bg-slate-800/30 sticky top-0 z-10">
-              <tr>
-                <th className="p-1 text-xs font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider w-24">Img</th>
-                <th className="px-3 py-3 text-left text-xs font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider">Artículo</th>
-                <th className="px-3 py-3 text-right text-xs font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider">Unid.</th>
-                <th className="px-3 py-3 text-right text-xs font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider">Stock</th>
-                <th className="px-3 py-3 text-right text-xs font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider">Costo</th>
-                <th className="px-3 py-3 text-right text-xs font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider">PVP</th>
-                <th className="px-3 py-3 text-right text-xs font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider">Venta $</th>
-                <th className="px-3 py-3 text-right text-xs font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider">Margen</th>
-                <th className="px-3 py-3 text-center text-xs font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider">Par/Día</th>
-                <th className="px-3 py-3 text-center text-xs font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider">Días Stock</th>
-                <th className="px-3 py-3 text-center text-xs font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider">Últ. Compra</th>
-                <th className="px-3 py-3 text-center text-xs font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider">Estado</th>
-                <th className="px-3 py-3 text-center text-xs font-bold text-gray-500 dark:text-slate-500 uppercase tracking-wider">Acción</th>
+            <thead className="bg-[#0c1425] sticky top-0 z-20 shadow-[0_2px_8px_rgba(0,0,0,0.3)]">
+              <tr className="border-b-2 border-blue-500/30">
+                <th className="p-1 text-xs font-bold text-slate-500 uppercase tracking-wider w-24">Img</th>
+                <SmartColumnHeader label="Artículo" columnKey="marca" align="left" sortable filterable
+                  currentSort={productSort} onSort={handleProductSort}
+                  filterValues={getProductUniqueValues(productos, 'marca')}
+                  activeFilter={productFilters.get('marca')} onFilter={handleProductFilter} />
+                <SmartColumnHeader label="Unid." columnKey="unidades" align="right"
+                  currentSort={productSort} onSort={handleProductSort} />
+                <SmartColumnHeader label="Stock" columnKey="stock" align="right"
+                  currentSort={productSort} onSort={handleProductSort} />
+                <SmartColumnHeader label="Costo" columnKey="costo" align="right"
+                  currentSort={productSort} onSort={handleProductSort} />
+                <SmartColumnHeader label="PVP" columnKey="pvp" align="right"
+                  currentSort={productSort} onSort={handleProductSort} />
+                <SmartColumnHeader label="Venta $" columnKey="venta" align="right"
+                  currentSort={productSort} onSort={handleProductSort} />
+                <SmartColumnHeader label="Margen" columnKey="margen" align="right"
+                  currentSort={productSort} onSort={handleProductSort} />
+                <SmartColumnHeader label="Par/Día" columnKey="parDia" align="center"
+                  currentSort={productSort} onSort={handleProductSort} />
+                <SmartColumnHeader label="Días Stock" columnKey="diasStock" align="center"
+                  currentSort={productSort} onSort={handleProductSort} />
+                <SmartColumnHeader label="Últ. Compra" columnKey="ultCompra" align="center"
+                  currentSort={productSort} onSort={handleProductSort} />
+                <SmartColumnHeader label="Estado" columnKey="estado" align="center" sortable filterable
+                  currentSort={productSort} onSort={handleProductSort}
+                  filterValues={getProductUniqueValues(productos, 'estado')}
+                  activeFilter={productFilters.get('estado')} onFilter={handleProductFilter} />
+                <th className="px-3 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Acción</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-slate-800/50">
-              {productos.map((p) => (
+              {processed.map((p) => (
                 <tr
                   key={p.BaseCol}
                   className="hover:bg-gray-50 dark:hover:bg-slate-800/30 transition-colors cursor-pointer group"
                   onClick={() => setSelectedProductId(p.BaseCol)}
                 >
-                  {/* Imagen grande */}
                   <td className="p-1">
                     <div className="w-20 h-20 bg-white rounded-lg overflow-hidden border border-gray-200 dark:border-slate-700 group-hover:border-blue-500/50 transition-all shadow-sm">
                       <img
@@ -449,7 +663,6 @@ export default function SellOutPage() {
                       />
                     </div>
                   </td>
-                  {/* Artículo: Marca / Descripción / SKU */}
                   <td className="px-3 py-3">
                     <div className="font-bold text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors text-sm">
                       {p.descripcionMarca}
@@ -459,11 +672,9 @@ export default function SellOutPage() {
                     </div>
                     <div className="text-xs text-gray-400 dark:text-slate-600 font-mono">{p.BaseCol}</div>
                   </td>
-                  {/* Unidades */}
-                  <td className="px-3 py-3 text-right font-mono font-bold text-gray-900 dark:text-white tabular-nums">
-                    {formatNumber(p.unidadesVendidas)}
+                  <td className="px-3 py-3 text-right font-mono font-bold text-gray-900 dark:text-white tabular-nums" title={`Total histórico: ${formatNumber(p.unidadesVendidas)}`}>
+                    {formatNumber(p.unidadesPeriodo ?? p.unidadesVendidas)}
                   </td>
-                  {/* Stock */}
                   <td className="px-3 py-3 text-right">
                     <span className={`font-mono tabular-nums font-bold ${
                       p.stockTotal > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400 dark:text-slate-500'
@@ -471,43 +682,35 @@ export default function SellOutPage() {
                       {formatNumber(p.stockTotal)}
                     </span>
                   </td>
-                  {/* Costo */}
                   <td className="px-3 py-3 text-right font-mono text-gray-500 dark:text-slate-400 tabular-nums text-sm">
                     {p.ultimoCosto ? formatCurrency(p.ultimoCosto) : '-'}
                   </td>
-                  {/* PVP */}
                   <td className="px-3 py-3 text-right font-mono text-emerald-600 dark:text-emerald-400 tabular-nums text-sm font-medium">
                     {p.pvp ? formatCurrency(p.pvp) : '-'}
                   </td>
-                  {/* Venta */}
                   <td className="px-3 py-3 text-right font-mono text-gray-900 dark:text-white tabular-nums text-sm font-medium">
                     {formatCurrency(p.ventaTotal)}
                   </td>
-                  {/* Margen */}
                   <td className={`px-3 py-3 text-right font-mono tabular-nums text-sm font-medium ${
                     p.margen != null && p.margen >= 30 ? 'text-emerald-600' :
                     p.margen != null && p.margen >= 15 ? 'text-blue-600' : 'text-red-600'
                   }`}>
                     {p.margen != null ? `${p.margen.toFixed(1)}%` : '-'}
                   </td>
-                  {/* Par/Día */}
                   <td className="px-3 py-3 text-center font-mono text-gray-600 dark:text-slate-400 tabular-nums text-sm">
                     {p.paresPorDia !== null ? p.paresPorDia.toFixed(2) : '-'}
                   </td>
-                  {/* Días Stock */}
                   <td className={`px-3 py-3 text-center font-mono tabular-nums text-sm font-medium ${
                     p.diasStock !== null && p.diasStock > 365 ? 'text-red-600' :
                     p.diasStock !== null && p.diasStock > 180 ? 'text-amber-600' : 'text-gray-600 dark:text-slate-400'
                   }`}>
                     {p.diasStock !== null ? Math.round(p.diasStock) : '-'}
                   </td>
-                  {/* Últ. Compra */}
                   <td className="px-3 py-3 text-center text-xs text-gray-500 dark:text-slate-500">
                     {p.fechaUltimaCompra
                       ? new Date(p.fechaUltimaCompra as string).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })
                       : '-'}
                   </td>
-                  {/* Estado */}
                   <td className="px-3 py-3 text-center">
                     <div className="flex items-center justify-center gap-1">
                       <ProductStatusBadge estado={p.estado} size="sm" showLabel={false} />
@@ -517,7 +720,6 @@ export default function SellOutPage() {
                       )}
                     </div>
                   </td>
-                  {/* Acción */}
                   <td className="px-3 py-3 text-center">
                     <button
                       onClick={(e) => {
@@ -537,6 +739,13 @@ export default function SellOutPage() {
                   </td>
                 </tr>
               ))}
+              {processed.length === 0 && (
+                <tr>
+                  <td colSpan={13} className="px-4 py-12 text-center text-gray-400 dark:text-slate-500">
+                    No hay productos que coincidan con los filtros aplicados
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

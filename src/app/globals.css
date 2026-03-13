@@ -111,6 +111,10 @@ html.light .hover\:text-white:hover {
 }
 
 /* Sidebar light theme */
+html.light .bg-\[#0f172a\] {
+  background-color: #ffffff !important;
+}
+
 html.light .sidebar-light {
   background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
   border-color: #e2e8f0;

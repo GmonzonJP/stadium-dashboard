@@ -7,7 +7,7 @@ import { MetricCard } from '@/components/MetricCard';
 import { PinnedMetricTable } from '@/components/PinnedMetricTable';
 import { ComparisonChart } from '@/components/ComparisonChart';
 import { ProductDetail } from '@/components/ProductDetail';
-import { ShoppingBag, DollarSign, Percent, Package, AlertCircle } from 'lucide-react';
+import { ShoppingBag, DollarSign, Percent, Package, AlertCircle, Receipt } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ActiveFiltersTags } from '@/components/ActiveFiltersTags';
 import { ProductAnalysisTable } from '@/components/ProductAnalysisTable';
@@ -222,17 +222,22 @@ export default function Dashboard() {
                 growth={metrics?.growthLY?.margin != null ? metrics?.growthLY?.margin : (metrics?.growth?.margin != null ? metrics?.growth?.margin : undefined)}
                 icon={Percent}
                 loading={isLoading}
-                subtitle="(Precio - Costo) / Precio × 100"
+                subtitle="(Precio - Costo) / Costo × 100"
                 onGroup={(type) => handleGroup("Margen", type)}
               />
               <MetricCard
-                title="Markup (%)"
-                value={metrics?.current?.markup != null ? `${metrics?.current?.markup.toFixed(2)}%` : 'N/A'}
-                growth={metrics?.growthLY?.markup != null ? metrics?.growthLY?.markup : (metrics?.growth?.markup != null ? metrics?.growth?.markup : undefined)}
-                icon={Percent}
+                title="Ticket Promedio"
+                value={metrics?.current?.units > 0 ? formatCurrency(metrics.current.sales / metrics.current.units) : 'N/A'}
+                growth={(() => {
+                  const currentTicket = metrics?.current?.units > 0 ? metrics.current.sales / metrics.current.units : 0;
+                  const lyTicket = metrics?.lastYear?.units > 0 ? metrics.lastYear.sales / metrics.lastYear.units : 0;
+                  const prevTicket = metrics?.previous?.units > 0 ? metrics.previous.sales / metrics.previous.units : 0;
+                  const compareTicket = lyTicket > 0 ? lyTicket : prevTicket;
+                  return compareTicket > 0 ? ((currentTicket - compareTicket) / compareTicket) * 100 : undefined;
+                })()}
+                icon={Receipt}
                 loading={isLoading}
-                subtitle="(Precio - Costo) / Costo × 100"
-                onGroup={(type) => handleGroup("Markup", type)}
+                subtitle="Venta / Unidades"
               />
             </div>
           </div>
@@ -280,6 +285,19 @@ export default function Dashboard() {
                 onGroup={(type) => handleGroup("Margen YTD", type)}
                 ignoresFilters={['período']}
                 emptyReason="Sin costos disponibles para calcular margen"
+              />
+              <MetricCard
+                title="Ticket Promedio YTD"
+                value={metrics?.ytd?.units > 0 ? formatCurrency(metrics.ytd.sales / metrics.ytd.units) : 'N/A'}
+                growth={(() => {
+                  const ytdTicket = metrics?.ytd?.units > 0 ? metrics.ytd.sales / metrics.ytd.units : 0;
+                  const ytdLyTicket = metrics?.ytdLastYear?.units > 0 ? metrics.ytdLastYear.sales / metrics.ytdLastYear.units : 0;
+                  return ytdLyTicket > 0 ? ((ytdTicket - ytdLyTicket) / ytdLyTicket) * 100 : undefined;
+                })()}
+                icon={Receipt}
+                loading={isLoading}
+                subtitle="Ticket promedio acumulado año en curso"
+                ignoresFilters={['período']}
               />
               <MetricCard
                 title="Stock Estimado"

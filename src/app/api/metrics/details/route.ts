@@ -173,7 +173,7 @@ async function handleStockDetails(filters: FilterParams, groupBy: string) {
 
         // Si hay filtro de marcas, agregarlo
         if (filters.brands?.length) {
-            const brandIds = filters.brands.map((b: number) => Number(b)).join(',');
+            const brandIds = filters.brands.map(b => Number(b)).join(',');
             whereClause += ` AND A.IdMarca IN (${brandIds})`;
         }
 

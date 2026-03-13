@@ -121,6 +121,19 @@ export async function POST(request: NextRequest) {
         GROUP BY T.BaseCol
       )
       ,
+      VentasPeriodo AS (
+        -- Unidades vendidas en el período seleccionado por el usuario
+        SELECT
+          T.BaseCol,
+          SUM(T.Cantidad) as UnidadesPeriodo,
+          SUM(T.PRECIO) as VentaPeriodo
+        FROM Transacciones T
+        WHERE T.Cantidad > 0
+          AND T.IdDeposito NOT IN (${webStoreIds})
+          ${startDate && endDate ? `AND T.Fecha >= '${startDate}' AND T.Fecha <= '${endDate}'` : ''}
+        {WHERE_CLAUSE}
+        GROUP BY T.BaseCol
+      ),
       PrecioVenta AS (
         SELECT
           Base as BaseCol,
@@ -162,7 +175,9 @@ export async function POST(request: NextRequest) {
         CASE
           WHEN PVG.PrimeraVentaGlobal < UCI.FechaUltimaCompra THEN 1
           ELSE 0
-        END as EsCarryover
+        END as EsCarryover,
+        COALESCE(VP.UnidadesPeriodo, 0) as UnidadesPeriodo,
+        COALESCE(VP.VentaPeriodo, 0) as VentaPeriodo
       FROM ProductoVentas PV
       LEFT JOIN ProductoStock PS ON PV.BaseCol = PS.BaseCol
       LEFT JOIN UltimaCompraInfo UCI ON PV.BaseCol = UCI.BaseCol
@@ -171,6 +186,7 @@ export async function POST(request: NextRequest) {
       LEFT JOIN Ventas180Dias V180 ON PV.BaseCol = V180.BaseCol
       LEFT JOIN PrecioVenta PRV ON PV.BaseCol = PRV.BaseCol
       LEFT JOIN PrimeraVentaGlobal PVG ON PV.BaseCol = PVG.BaseCol
+      LEFT JOIN VentasPeriodo VP ON PV.BaseCol = VP.BaseCol
       ORDER BY PV.VentaTotal DESC
     `;
 
@@ -183,12 +199,11 @@ export async function POST(request: NextRequest) {
     if (categories?.length) andClauses.push(`T.IdClase IN (${categories.join(',')})`);
     if (genders?.length) andClauses.push(`T.idGenero IN (${genders.join(',')})`);
     if (suppliers?.length) {
-      const formattedSuppliers = suppliers.map((s: any) => typeof s === 'string' ? `'${s}'` : s);
-      andClauses.push(`T.idProveedor IN (${formattedSuppliers.join(',')})`);
+      andClauses.push(`T.idProveedor IN (${suppliers.join(',')})`);
     }
 
     const whereClause = andClauses.length > 0 ? ` AND ${andClauses.join(' AND ')}` : '';
-    const query = baseQuery.replace('{WHERE_CLAUSE}', whereClause);
+    const query = baseQuery.replaceAll('{WHERE_CLAUSE}', whereClause);
 
     const result = await pool.request().query(query);
     const rawProducts = result.recordset;
@@ -245,7 +260,9 @@ export async function POST(request: NextRequest) {
         descripcionMarca: p.DescripcionMarca || p.marca || '',
         descripcionCorta: raw.DescripcionCorta || '',
         unidadesVendidas: raw.UnidadesVendidas || 0,
+        unidadesPeriodo: raw.UnidadesPeriodo || 0,
         ventaTotal: raw.VentaTotal || 0,
+        ventaPeriodo: raw.VentaPeriodo || 0,
         stockTotal: p.stockActual,
         paresPorDia: p.paresPorDia,
         diasStock: p.diasParaVenderStock,

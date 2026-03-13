@@ -12,8 +12,8 @@ interface FilterPanelProps {
     isOpen: boolean;
     onClose: () => void;
     items: FilterItem[];
-    selectedIds: number[];
-    onToggle: (id: number) => void;
+    selectedIds: (number | string)[];
+    onToggle: (id: number | string) => void;
     onSelectAll: () => void;
     onClear: () => void;
 }

@@ -292,7 +292,7 @@ export function ProductAnalysisTable() {
             </div>
 
             {/* Table */}
-            <div className="overflow-auto custom-scrollbar max-h-[75vh] relative" style={{ minHeight: '400px' }}>
+            <div className="overflow-auto custom-scrollbar relative" style={{ minHeight: '400px', maxHeight: pageSize === -1 ? 'none' : `${Math.max(500, pageSize * 90)}px` }}>
                 <table className="w-full text-left border-collapse min-w-[1400px]">
                     <thead className="sticky top-0 z-20">
                         <tr className="bg-[#0c1425] shadow-[0_2px_8px_rgba(0,0,0,0.3)]">

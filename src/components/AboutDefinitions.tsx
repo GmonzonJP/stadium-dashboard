@@ -15,8 +15,17 @@ interface DefinitionSection {
     content: React.ReactNode;
 }
 
-export function AboutDefinitions() {
+interface AboutDefinitionsProps {
+    externalOpen?: number | boolean;
+}
+
+export function AboutDefinitions({ externalOpen }: AboutDefinitionsProps = {}) {
     const [isOpen, setIsOpen] = useState(false);
+
+    // Allow parent to open from outside (each increment triggers open)
+    React.useEffect(() => {
+        if (externalOpen) setIsOpen(true);
+    }, [externalOpen]);
     const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['stock', 'kpis']));
 
     const toggleSection = (id: string) => {
@@ -212,18 +221,6 @@ export function AboutDefinitions() {
 
     return (
         <>
-            {/* Floating Button */}
-            <button
-                onClick={() => setIsOpen(true)}
-                className="fixed bottom-20 right-6 z-40 p-3 bg-blue-600 hover:bg-blue-500 text-white rounded-full shadow-lg shadow-blue-500/30 transition-all hover:scale-105 group"
-                title="Definiciones y Ayuda"
-            >
-                <Info size={24} />
-                <span className="absolute right-full mr-3 top-1/2 -translate-y-1/2 bg-slate-800 text-white text-xs font-medium px-3 py-1.5 rounded-lg whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity">
-                    Definiciones
-                </span>
-            </button>
-
             {/* Modal */}
             <AnimatePresence>
                 {isOpen && (

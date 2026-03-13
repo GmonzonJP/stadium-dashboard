@@ -157,6 +157,7 @@ export async function GET(
                 T.IdGenero,
                 T.DescripcionGenero,
                 AR.descripcionCorta,
+                MAX(T.NombreProveedor) as NombreProveedor,
                 SUM(T.Cantidad) as unidades,
                 CAST(SUM(T.PRECIO) as decimal(18,2)) as Venta,
                 MAX(T.PRECIO / NULLIF(T.Cantidad, 0)) as precioUnitarioTransaccion,
@@ -235,13 +236,15 @@ export async function GET(
         // Get stock by store from MovStockTotalResumen (grouped by BaseCol and IdDeposito)
         // Use LIKE to match BaseCol (first part before talla)
         const stockByStoreQuery = `
-            SELECT 
+            SELECT
                 M.idDeposito as id,
                 MAX(TI.Descripcion) as descripcion,
-                SUM(M.TotalStock) as ttlstock
+                SUM(M.TotalStock) as ttlstock,
+                SUM(CASE WHEN M.Pendientes > 0 THEN M.Pendientes ELSE 0 END) as pendientes
             FROM MovStockTotalResumen M
-            INNER JOIN Tiendas TI ON TI.IdTienda = M.idDeposito
+            LEFT JOIN Tiendas TI ON TI.IdTienda = M.idDeposito
             WHERE M.IdArticulo LIKE @articulo + '%'
+            AND (M.TotalStock > 0 OR ISNULL(M.Pendientes, 0) > 0)
             GROUP BY M.idDeposito
         `;
 
@@ -285,8 +288,9 @@ export async function GET(
         stockByStoreResult.recordset.forEach((row: any) => {
             storesMap.set(row.id, {
                 id: row.id,
-                descripcion: row.descripcion,
+                descripcion: row.descripcion || `Depósito ${row.id}`,
                 ttlstock: Number(row.ttlstock) || 0,
+                pendientes: Number(row.pendientes) || 0,
                 ttlunidadesVenta: 0,
                 ttlimporteVenta: 0
             });
@@ -430,7 +434,7 @@ export async function GET(
         // Stock inicial = cantidad total de última compra (suma de todas las tallas en esa fecha)
         // Stock actual = stock actual en MovStockTotalResumen
         // Unidades vendidas = unidades vendidas desde última compra
-        const stockActual = sucursales.reduce((sum, s) => sum + s.ttlstock, 0);
+        const stockActual = sucursales.reduce((sum, s) => sum + s.ttlstock + (s.pendientes || 0), 0);
         const stockInicial = ultimaCompra && ultimaCompra.cantidadTotal 
             ? Number(ultimaCompra.cantidadTotal) 
             : stockActual + unidadesVendidasDesdeUltCompra;
@@ -797,14 +801,9 @@ export async function GET(
             ? importeVentaDesdeUltCompra / unidadesVendidasDesdeUltCompra 
             : null;
         
-        // Margen = (Precio / Costo) - 1 expresado en %
+        // Margen = (Precio - Costo) / Costo * 100
         const margen = asp && ultimoCostoValue > 0
             ? ((asp - ultimoCostoValue) / ultimoCostoValue) * 100
-            : null;
-        
-        // Markup = (Precio - Costo) / Costo * 100
-        const markup = asp && ultimoCostoValue > 0 
-            ? ((asp - ultimoCostoValue) / ultimoCostoValue) * 100 
             : null;
         
         // Días de Stock = Stock Actual / Ritmo de Venta Diario
@@ -1051,7 +1050,7 @@ export async function GET(
             // Nuevas métricas solicitadas
             asp: asp, // Precio Promedio de Venta
             margen: margen, // Margen %
-            markup: markup, // Markup %
+            proveedor: product.NombreProveedor || null, // Nombre del proveedor
             diasStock: diasStock, // Días de Stock estimados
             ritmoDiario: ritmoDiario, // Pares por día
             // Datos del período seleccionado

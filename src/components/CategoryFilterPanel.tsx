@@ -11,9 +11,9 @@ interface CategoryFilterPanelProps {
     isOpen: boolean;
     onClose: () => void;
     sections: SectionItem[];
-    selectedIds: number[];
-    onToggle: (id: number) => void;
-    onToggleSection: (categoryIds: number[], select: boolean, sectionId?: number) => void;
+    selectedIds: (number | string)[];
+    onToggle: (id: number | string) => void;
+    onToggleSection: (categoryIds: (number | string)[], select: boolean, sectionId?: number) => void;
     onSelectAll: () => void;
     onClear: () => void;
 }
@@ -117,7 +117,7 @@ export function CategoryFilterPanel({
     const flatCategories = useMemo(() => {
         const allCats = sections.flatMap(s => s.categories);
         // Deduplicar por id
-        const seen = new Set<number>();
+        const seen = new Set<number | string>();
         const unique = allCats.filter(c => {
             if (seen.has(c.id)) return false;
             seen.add(c.id);

@@ -14,7 +14,7 @@ export interface SalesMetrics {
 }
 
 export interface FilterItem {
-    id: number;
+    id: number | string;
     label: string;
 }
 
@@ -43,15 +43,18 @@ export type ComparisonMode = '52weeks' | 'calendar';
 export interface FilterParams {
     startDate: string;
     endDate: string;
-    stores?: number[];
-    brands?: number[];
-    categories?: number[];
-    sections?: number[];
-    genders?: number[];
-    suppliers?: number[];
+    stores?: (number | string)[];
+    brands?: (number | string)[];
+    categories?: (number | string)[];
+    sections?: (number | string)[];
+    genders?: (number | string)[];
+    suppliers?: (number | string)[];
     search?: string;
     comparisonMode?: ComparisonMode;
 }
 
 // Exportar tipos de Price Actions
 export * from './price-actions';
+
+// Exportar tipos de Stock sin Ventas
+export * from './stock-sin-ventas';

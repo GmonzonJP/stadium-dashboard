@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Search, Bell, User, Calendar, Settings, LogOut, ChevronDown, Users, Sun, Moon, Lightbulb, CalendarDays, RotateCcw, ArrowDownAZ, TrendingUp } from 'lucide-react';
+import { Search, Bell, User, Calendar, Settings, LogOut, ChevronDown, Users, Sun, Moon, Lightbulb, CalendarDays, RotateCcw, ArrowDownAZ, TrendingUp, Smartphone, MessageSquarePlus } from 'lucide-react';
 import { DateRangePicker } from './DateRangePicker';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { useFilters } from '@/context/FilterContext';
@@ -18,6 +19,7 @@ export function TopBar({
     alertsData?: any;
     isLoadingAlerts?: boolean;
 }) {
+    const router = useRouter();
     const { user, logout } = useAuth();
     const { theme, toggleTheme } = useTheme();
     const { comparisonMode, setComparisonMode, filterSortOrder, setFilterSortOrder } = useFilters();
@@ -186,6 +188,19 @@ export function TopBar({
                                                 </div>
                                             </button>
 
+                                            <div className="border-t border-slate-700 my-2" />
+                                            <button
+                                                onClick={() => {
+                                                    localStorage.setItem('stadium-view-mode', 'simple');
+                                                    setShowSettingsMenu(false);
+                                                    router.push('/m');
+                                                }}
+                                                className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 rounded transition-colors"
+                                            >
+                                                <Smartphone size={16} className="text-cyan-400" />
+                                                <span>Modo Simple</span>
+                                            </button>
+
                                             {user?.rol === 'admin' && (
                                                 <>
                                                     <div className="border-t border-slate-700 my-2" />
@@ -198,6 +213,16 @@ export function TopBar({
                                                     >
                                                         <Users size={16} />
                                                         <span>Gestión de Usuarios</span>
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            router.push('/admin/feedback');
+                                                            setShowSettingsMenu(false);
+                                                        }}
+                                                        className="w-full flex items-center space-x-2 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 rounded transition-colors"
+                                                    >
+                                                        <MessageSquarePlus size={16} className="text-blue-400" />
+                                                        <span>Ver Feedback</span>
                                                     </button>
                                                 </>
                                             )}

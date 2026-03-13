@@ -93,10 +93,10 @@ export interface WatchlistItem {
 }
 
 export interface WatchlistFilters {
-    stores?: number[];
-    categories?: number[];
-    brands?: number[];
-    genders?: number[];
+    stores?: (number | string)[];
+    categories?: (number | string)[];
+    brands?: (number | string)[];
+    genders?: (number | string)[];
     priceBands?: string[];
     severidad?: 'critico' | 'bajo' | 'normal' | 'all';
     motivo?: WatchlistReason[];

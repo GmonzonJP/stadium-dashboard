@@ -43,8 +43,7 @@ export async function POST(req: NextRequest) {
         }
         
         if (filters.suppliers?.length) {
-            const formattedSuppliers = filters.suppliers.map(s => typeof s === 'string' ? `'${s}'` : s);
-            additionalWhereClauses.push(`T.idProveedor IN (${formattedSuppliers.join(',')})`);
+            additionalWhereClauses.push(`T.idProveedor IN (${filters.suppliers.join(',')})`);
         }
         
         const additionalWhere = additionalWhereClauses.length > 0 

@@ -3,28 +3,40 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { LogIn, Lock, User, AlertCircle } from 'lucide-react';
+import { LogIn, Lock, User, AlertCircle, Monitor, Smartphone } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 
 export default function LoginPage() {
     const router = useRouter();
+    const { login: authLogin, user } = useAuth();
     const [usuario, setUsuario] = useState('');
     const [password, setPassword] = useState('');
     const [rememberMe, setRememberMe] = useState(true);
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [viewMode, setViewMode] = useState<'full' | 'simple'>('full');
 
+    // Load saved view mode preference
     useEffect(() => {
-        // Verificar si ya está autenticado
-        fetch('/api/auth/me')
-            .then(res => {
-                if (res.ok) {
-                    router.push('/');
-                }
-            })
-            .catch(() => {
-                // No autenticado, mostrar login
-            });
-    }, [router]);
+        const saved = localStorage.getItem('stadium-view-mode');
+        if (saved === 'simple' || saved === 'full') {
+            setViewMode(saved);
+        }
+    }, []);
+
+    // Redirect if already authenticated, based on view mode preference
+    useEffect(() => {
+        if (user) {
+            const saved = localStorage.getItem('stadium-view-mode');
+            router.push(saved === 'simple' ? '/m' : '/');
+        }
+    }, [user, router]);
+
+    const handleViewModeToggle = () => {
+        const newMode = viewMode === 'full' ? 'simple' : 'full';
+        setViewMode(newMode);
+        localStorage.setItem('stadium-view-mode', newMode);
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -32,27 +44,10 @@ export default function LoginPage() {
         setIsLoading(true);
 
         try {
-            const response = await fetch('/api/auth/login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ usuario, password, rememberMe }),
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                setError(data.error || 'Error al iniciar sesión');
-                setIsLoading(false);
-                return;
-            }
-
-            // Redirigir al dashboard
-            router.push('/');
-            router.refresh();
+            localStorage.setItem('stadium-view-mode', viewMode);
+            await authLogin(usuario, password, rememberMe);
         } catch (err) {
-            setError('Error de conexión. Intente nuevamente.');
+            setError(err instanceof Error ? err.message : 'Error de conexión. Intente nuevamente.');
             setIsLoading(false);
         }
     };
@@ -125,18 +120,47 @@ export default function LoginPage() {
                             </div>
                         </div>
 
-                        <div className="flex items-center">
-                            <input
-                                type="checkbox"
-                                id="rememberMe"
-                                checked={rememberMe}
-                                onChange={(e) => setRememberMe(e.target.checked)}
-                                className="w-4 h-4 bg-slate-900/50 border-slate-700 rounded text-blue-500 focus:ring-blue-500 focus:ring-2"
-                            />
-                            <label htmlFor="rememberMe" className="ml-2 text-sm text-slate-300">
-                                Recordar sesión
-                            </label>
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center">
+                                <input
+                                    type="checkbox"
+                                    id="rememberMe"
+                                    checked={rememberMe}
+                                    onChange={(e) => setRememberMe(e.target.checked)}
+                                    className="w-4 h-4 bg-slate-900/50 border-slate-700 rounded text-blue-500 focus:ring-blue-500 focus:ring-2"
+                                />
+                                <label htmlFor="rememberMe" className="ml-2 text-sm text-slate-300">
+                                    Recordar sesión
+                                </label>
+                            </div>
                         </div>
+
+                        {/* View Mode Toggle */}
+                        <button
+                            type="button"
+                            onClick={handleViewModeToggle}
+                            className="w-full flex items-center justify-between px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-lg hover:border-slate-600 transition-colors"
+                        >
+                            <div className="flex items-center space-x-3">
+                                {viewMode === 'simple' ? (
+                                    <Smartphone size={18} className="text-cyan-400" />
+                                ) : (
+                                    <Monitor size={18} className="text-blue-400" />
+                                )}
+                                <span className="text-sm text-slate-300">
+                                    {viewMode === 'simple' ? 'Modo Simple' : 'Modo Completo'}
+                                </span>
+                            </div>
+                            <div className={`relative w-11 h-6 rounded-full transition-colors ${viewMode === 'simple' ? 'bg-cyan-500' : 'bg-blue-600'}`}>
+                                <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform flex items-center justify-center ${viewMode === 'simple' ? 'translate-x-5' : 'translate-x-0.5'}`}>
+                                    {viewMode === 'simple' ? (
+                                        <Smartphone size={12} className="text-cyan-500" />
+                                    ) : (
+                                        <Monitor size={12} className="text-blue-600" />
+                                    )}
+                                </div>
+                            </div>
+                        </button>
 
                         <button
                             type="submit"

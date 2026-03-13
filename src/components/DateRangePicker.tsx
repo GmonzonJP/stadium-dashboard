@@ -78,6 +78,13 @@ export function DateRangePicker() {
                 start = new Date(year, today.getMonth() - 1, 1);
                 end = new Date(year, today.getMonth(), 0);
                 break;
+            case 'Ultimo Año':
+                start.setDate(today.getDate() - 364);
+                break;
+            case 'Año Calendario Anterior':
+                start = new Date(year - 1, 0, 1);
+                end = new Date(year - 1, 11, 31);
+                break;
             case 'Q1':
                 start = new Date(year, 0, 1);
                 end = new Date(year, 2, 31);
@@ -167,7 +174,7 @@ export function DateRangePicker() {
                         >
                             {!showCustomRange ? (
                                 <div className="py-1">
-                                    {['Hoy', 'Ayer', 'Ultimos 7 Dias', 'Ultimos 90 Dias', 'Este Mes', 'Mes Pasado'].map((preset) => (
+                                    {['Hoy', 'Ayer', 'Ultimos 7 Dias', 'Ultimos 90 Dias', 'Este Mes', 'Mes Pasado', 'Ultimo Año', 'Año Calendario Anterior'].map((preset) => (
                                         <button
                                             key={preset}
                                             onClick={() => applyPreset(preset)}

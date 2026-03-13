@@ -170,8 +170,7 @@ export function buildFilterConditions(filters: FilterParams, tableAlias: string 
     }
 
     if (filters.suppliers?.length) {
-        const formattedSuppliers = filters.suppliers.map(s => typeof s === 'string' ? `'${s}'` : s);
-        conditions.push(`${prefix}idProveedor IN (${formattedSuppliers.join(',')})`);
+        conditions.push(`${prefix}idProveedor IN (${filters.suppliers.join(',')})`);
     }
 
     return conditions.length > 0 ? conditions.join(' AND ') : '1=1';

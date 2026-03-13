@@ -86,8 +86,9 @@ export function calculateParesPorDia(
 
 /**
  * Calcula el margen
- * margen = (precio / costo) - 1, expresado en %
+ * margen = (precio - costo) / costo * 100
  * Ejemplo: Costo=100, Venta=150 → 50%
+ * Ejemplo: Costo=100, Venta=200 → 100%
  * @param precio - Precio de venta (ASP)
  * @param costo - Costo (con IVA si corresponde)
  * @returns Margen en porcentaje o null si no se puede calcular
@@ -102,22 +103,8 @@ export function calculateMargen(
     return ((precio - costo) / costo) * 100;
 }
 
-/**
- * Calcula el markup
- * markup = (precio - costo) / costo * 100
- * @param precio - Precio de venta
- * @param costo - Costo (con IVA si corresponde)
- * @returns Markup en porcentaje o null si no se puede calcular
- */
-export function calculateMarkup(
-    precio: number | null | undefined,
-    costo: number | null | undefined
-): number | null {
-    if (precio == null || costo == null || costo === 0) {
-        return null;
-    }
-    return ((precio - costo) / costo) * 100;
-}
+/** @deprecated Usar calculateMargen */
+export const calculateMarkup = calculateMargen;
 
 /**
  * Calcula el sell-through rate

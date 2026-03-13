@@ -63,15 +63,15 @@ export async function POST(req: NextRequest) {
         const ytdLyEndDate = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate()).toISOString().split('T')[0];
 
         // Query for current period metrics
-        // IMPORTANTE: JOIN con Articulos para obtener Base correcto (NO SUBSTRING)
+        // IMPORTANTE: UltimoCosto ya incluye IVA (consistente con products/analysis)
         const metricsSQL = `
-            SELECT 
+            SELECT
                 SUM(T.Cantidad) as units,
                 CAST(SUM(T.Precio) as decimal(18,2)) as sales,
-                CAST(SUM(CAST(T.Cantidad as decimal(18,2)) * (1.22 * ISNULL(UC.ultimoCosto, 0))) as decimal(18,2)) as costoVenta
+                CAST(SUM(CAST(T.Cantidad as decimal(18,2)) * ISNULL(UC.ultimoCosto, 0)) as decimal(18,2)) as costoVenta
             FROM Transacciones T
             LEFT JOIN (
-                SELECT A.Base as BaseCol, MAX(UC.UltimoCosto) as ultimoCosto 
+                SELECT A.Base as BaseCol, MAX(UC.UltimoCosto) as ultimoCosto
                 FROM UltimaCompra UC
                 INNER JOIN Articulos A ON A.IdArticulo = UC.BaseArticulo
                 GROUP BY A.Base
@@ -81,17 +81,33 @@ export async function POST(req: NextRequest) {
 
         // Query for stock from MovStockTotalResumen
         // IMPORTANTE: JOIN con Articulos para filtrar por IdMarca (NO SUBSTRING)
+        // Agregar JOIN con Transacciones para filtrar por proveedor si es necesario
         let stockSQL = `
             SELECT SUM(MS.TotalStock) as stock
             FROM MovStockTotalResumen MS
             INNER JOIN Articulos A ON A.IdArticulo = MS.IdArticulo
             WHERE 1=1
         `;
-        
+
         if (filters.brands?.length) {
-            // Filtrar por IdMarca de la tabla Articulos
-            const brandIds = filters.brands.map((b: number) => Number(b)).join(',');
+            const brandIds = filters.brands.map(b => Number(b)).join(',');
             stockSQL += ` AND A.IdMarca IN (${brandIds})`;
+        }
+
+        if (filters.categories?.length) {
+            stockSQL += ` AND A.IdClase IN (${filters.categories.join(',')})`;
+        }
+
+        if (filters.sections?.length) {
+            stockSQL += ` AND A.IdSeccion IN (${filters.sections.join(',')})`;
+        }
+
+        if (filters.genders?.length) {
+            stockSQL += ` AND A.idGenero IN (${filters.genders.join(',')})`;
+        }
+
+        if (filters.suppliers?.length) {
+            stockSQL += ` AND A.Base IN (SELECT DISTINCT T.BaseCol FROM Transacciones T WHERE T.idProveedor IN (${filters.suppliers.join(',')}))`;
         }
 
         // Build queries for all periods
@@ -122,24 +138,16 @@ export async function POST(req: NextRequest) {
         const ytdLy = ytdLyResult.recordset[0] || { units: 0, sales: 0, costoVenta: 0 };
         const stock = stockResult.recordset[0]?.stock || 0;
 
-        // Calculate Margen = (Venta / Costo) - 1, expresado en %
+        // Calculate Margen = (Venta - Costo) / Costo * 100
+        // Ej: Costo=100, Venta=150 → 50%, Costo=100, Venta=200 → 100%
         const calculateMargin = (sales: number, cost: number) =>
             cost > 0 ? ((sales - cost) / cost) * 100 : null;
 
-        // Calculate Markup = (Precio - Costo) / Costo * 100
-        const calculateMarkup = (sales: number, cost: number) => 
-            cost > 0 ? ((sales - cost) / cost) * 100 : null;
-
         const currentMargin = calculateMargin(current.sales, current.costoVenta);
-        const currentMarkup = calculateMarkup(current.sales, current.costoVenta);
         const prevMargin = calculateMargin(prev.sales, prev.costoVenta);
-        const prevMarkup = calculateMarkup(prev.sales, prev.costoVenta);
         const lyMargin = calculateMargin(ly.sales, ly.costoVenta);
-        const lyMarkup = calculateMarkup(ly.sales, ly.costoVenta);
         const ytdMargin = calculateMargin(ytd.sales, ytd.costoVenta);
-        const ytdMarkup = calculateMarkup(ytd.sales, ytd.costoVenta);
         const ytdLyMargin = calculateMargin(ytdLy.sales, ytdLy.costoVenta);
-        const ytdLyMarkup = calculateMarkup(ytdLy.sales, ytdLy.costoVenta);
 
         // Calculate variations
         const calculateVariation = (current: number, previous: number) => 
@@ -151,16 +159,14 @@ export async function POST(req: NextRequest) {
                 units: current.units || 0,
                 sales: current.sales || 0,
                 cost: current.costoVenta || 0,
-                margin: currentMargin,
-                markup: currentMarkup
+                margin: currentMargin
             },
             // Previous period (same duration, before current)
             previous: {
                 units: prev.units || 0,
                 sales: prev.sales || 0,
                 cost: prev.costoVenta || 0,
-                margin: prevMargin,
-                markup: prevMarkup
+                margin: prevMargin
             },
             // Last Year (LY) - same dates but -1 year
             lastYear: {
@@ -168,7 +174,6 @@ export async function POST(req: NextRequest) {
                 sales: ly.sales || 0,
                 cost: ly.costoVenta || 0,
                 margin: lyMargin,
-                markup: lyMarkup,
                 hasData: (ly.units || 0) > 0 || (ly.sales || 0) > 0
             },
             // Year to Date (YTD) - ignores period filter
@@ -176,8 +181,7 @@ export async function POST(req: NextRequest) {
                 units: ytd.units || 0,
                 sales: ytd.sales || 0,
                 cost: ytd.costoVenta || 0,
-                margin: ytdMargin,
-                markup: ytdMarkup
+                margin: ytdMargin
             },
             // YTD Last Year
             ytdLastYear: {
@@ -185,7 +189,6 @@ export async function POST(req: NextRequest) {
                 sales: ytdLy.sales || 0,
                 cost: ytdLy.costoVenta || 0,
                 margin: ytdLyMargin,
-                markup: ytdLyMarkup,
                 hasData: (ytdLy.units || 0) > 0 || (ytdLy.sales || 0) > 0
             },
             stock: stock,
@@ -193,22 +196,19 @@ export async function POST(req: NextRequest) {
             growth: {
                 units: calculateVariation(current.units, prev.units),
                 sales: calculateVariation(current.sales, prev.sales),
-                margin: prevMargin !== null && currentMargin !== null ? calculateVariation(currentMargin, prevMargin) : null,
-                markup: prevMarkup !== null && currentMarkup !== null ? calculateVariation(currentMarkup, prevMarkup) : null
+                margin: prevMargin !== null && currentMargin !== null ? calculateVariation(currentMargin, prevMargin) : null
             },
             // Growth vs Last Year
             growthLY: {
                 units: ly.units > 0 ? calculateVariation(current.units, ly.units) : null,
                 sales: ly.sales > 0 ? calculateVariation(current.sales, ly.sales) : null,
-                margin: lyMargin !== null && currentMargin !== null ? calculateVariation(currentMargin, lyMargin) : null,
-                markup: lyMarkup !== null && currentMarkup !== null ? calculateVariation(currentMarkup, lyMarkup) : null
+                margin: lyMargin !== null && currentMargin !== null ? calculateVariation(currentMargin, lyMargin) : null
             },
             // Growth YTD vs YTD LY
             growthYTD: {
                 units: ytdLy.units > 0 ? calculateVariation(ytd.units, ytdLy.units) : null,
                 sales: ytdLy.sales > 0 ? calculateVariation(ytd.sales, ytdLy.sales) : null,
-                margin: ytdLyMargin !== null && ytdMargin !== null ? calculateVariation(ytdMargin, ytdLyMargin) : null,
-                markup: ytdLyMarkup !== null && ytdMarkup !== null ? calculateVariation(ytdMarkup, ytdLyMarkup) : null
+                margin: ytdLyMargin !== null && ytdMargin !== null ? calculateVariation(ytdMargin, ytdLyMargin) : null
             }
         });
 

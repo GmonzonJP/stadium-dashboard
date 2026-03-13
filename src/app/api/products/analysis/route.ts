@@ -219,7 +219,7 @@ export async function POST(req: NextRequest) {
         // Aplicar filtros de marca al stock si existen
         let stockQuery = stockSQL;
         if (filters.brands?.length) {
-            const brandIds = filters.brands.map((b: number) => Number(b)).join(',');
+            const brandIds = filters.brands.map(b => Number(b)).join(',');
             stockQuery = stockSQL.replace(
                 'WHERE MS.TotalStock',
                 `WHERE A.IdMarca IN (${brandIds}) AND (MS.TotalStock`

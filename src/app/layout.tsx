@@ -18,8 +18,28 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es" className="dark">
-      <body className={`${inter.className} bg-[#020617] dark:bg-[#020617] light:bg-slate-100 text-slate-200 dark:text-slate-200 light:text-slate-800 antialiased transition-colors duration-300`}>
+    <html lang="es" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var theme = localStorage.getItem('stadium-theme');
+                  if (theme === 'light') {
+                    document.documentElement.classList.add('light');
+                  } else {
+                    document.documentElement.classList.add('dark');
+                  }
+                } catch(e) {
+                  document.documentElement.classList.add('dark');
+                }
+              })();
+            `,
+          }}
+        />
+      </head>
+      <body className={`${inter.className} bg-[#020617] dark:bg-[#020617] text-slate-200 dark:text-slate-200 antialiased transition-colors duration-300`}>
         <ThemeProvider>
           <AuthProvider>
             <FilterProvider>

@@ -197,7 +197,9 @@ export interface SellOutByProduct {
   descripcionMarca: string;
   descripcionCorta: string;
   unidadesVendidas: number;
+  unidadesPeriodo?: number;    // Unidades vendidas en el período seleccionado
   ventaTotal: number;
+  ventaPeriodo?: number;        // Venta en el período seleccionado
   stockTotal: number;
   paresPorDia: number | null;
   diasStock: number | null;

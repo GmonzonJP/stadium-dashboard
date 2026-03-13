@@ -195,7 +195,7 @@ export default function ProductoDetailPage() {
                                 </div>
                             </div>
 
-                            {/* Pricing - Row 2: Margen, Markup, Días de Stock */}
+                            {/* Pricing - Row 2: Margen, Proveedor, Días de Stock */}
                             <div className="grid grid-cols-3 gap-4">
                                 <div className={`border rounded-xl p-4 ${data?.margen && data.margen > 30 ? 'bg-green-950/30 border-green-900/50' : data?.margen && data.margen > 0 ? 'bg-yellow-950/30 border-yellow-900/50' : 'bg-red-950/30 border-red-900/50'}`}>
                                     <div className={`text-xs font-semibold uppercase mb-1 ${data?.margen && data.margen > 30 ? 'text-green-400' : data?.margen && data.margen > 0 ? 'text-yellow-400' : 'text-red-400'}`}>Margen</div>
@@ -204,16 +204,13 @@ export default function ProductoDetailPage() {
                                             ? `${Number(data.margen).toFixed(1)}%`
                                             : '--'}
                                     </div>
-                                    <div className="text-xs text-slate-500 mt-1">(Precio-Costo)/Precio</div>
+                                    <div className="text-xs text-slate-500 mt-1">(Precio-Costo)/Costo</div>
                                 </div>
                                 <div className="bg-indigo-950/30 border border-indigo-900/50 rounded-xl p-4">
-                                    <div className="text-xs text-indigo-400 font-semibold uppercase mb-1">Markup</div>
-                                    <div className="text-xl font-bold text-indigo-300">
-                                        {data?.markup !== null && data?.markup !== undefined
-                                            ? `${Number(data.markup).toFixed(1)}%`
-                                            : '--'}
+                                    <div className="text-xs text-indigo-400 font-semibold uppercase mb-1">Proveedor</div>
+                                    <div className="text-lg font-bold text-indigo-300 truncate" title={data?.proveedor || ''}>
+                                        {data?.proveedor || '--'}
                                     </div>
-                                    <div className="text-xs text-slate-500 mt-1">(Precio-Costo)/Costo</div>
                                 </div>
                                 <div className={`border rounded-xl p-4 ${data?.diasStock && data.diasStock < 30 ? 'bg-red-950/30 border-red-900/50' : data?.diasStock && data.diasStock < 90 ? 'bg-yellow-950/30 border-yellow-900/50' : 'bg-cyan-950/30 border-cyan-900/50'}`}>
                                     <div className={`text-xs font-semibold uppercase mb-1 ${data?.diasStock && data.diasStock < 30 ? 'text-red-400' : data?.diasStock && data.diasStock < 90 ? 'text-yellow-400' : 'text-cyan-400'}`}>Días de Stock</div>

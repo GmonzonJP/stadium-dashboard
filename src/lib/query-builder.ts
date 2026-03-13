@@ -39,8 +39,7 @@ export function buildDashboardQuery(baseQuery: string, filters: FilterParams, op
     }
 
     if (filters.suppliers?.length) {
-        const formattedSuppliers = filters.suppliers.map(s => typeof s === 'string' ? `'${s}'` : s);
-        whereClauses.push(`${prefix}idProveedor IN (${formattedSuppliers.join(',')})`);
+        whereClauses.push(`${prefix}idProveedor IN (${filters.suppliers.join(',')})`);
     }
 
     if (filters.search && options.searchColumns?.length) {

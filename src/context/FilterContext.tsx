@@ -14,7 +14,7 @@ interface FilterContextType {
     selectedFilters: FilterParams;
     setSelectedFilters: React.Dispatch<React.SetStateAction<FilterParams>>;
     isLoading: boolean;
-    toggleFilter: (category: keyof FilterParams, id: number) => void;
+    toggleFilter: (category: keyof FilterParams, id: number | string) => void;
     comparisonMode: ComparisonMode;
     setComparisonMode: (mode: ComparisonMode) => void;
     filterSortOrder: FilterSortOrder;
@@ -94,9 +94,9 @@ export function FilterProvider({ children }: { children: React.ReactNode }) {
             });
     }, []);
 
-    const toggleFilter = (category: keyof FilterParams, id: number) => {
+    const toggleFilter = (category: keyof FilterParams, id: number | string) => {
         setSelectedFilters(prev => {
-            const current = (prev[category] as number[]) || [];
+            const current = (prev[category] as (number | string)[]) || [];
             const next = current.includes(id)
                 ? current.filter(i => i !== id)
                 : [...current, id];

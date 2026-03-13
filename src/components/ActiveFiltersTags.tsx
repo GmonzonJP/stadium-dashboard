@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 interface ActiveFiltersTagsProps {
     selectedFilters: FilterParams;
     filterData: FilterData;
-    onRemoveFilter: (category: keyof FilterParams, id: number) => void;
+    onRemoveFilter: (category: keyof FilterParams, id: number | string) => void;
 }
 
 const filterLabels: Record<string, string> = {
@@ -41,13 +41,13 @@ interface TagItem {
     label: string;
     categoryLabel: string;
     // For collapsed section tags: all category IDs in the section
-    sectionCategoryIds?: number[];
+    sectionCategoryIds?: (number | string)[];
 }
 
 export function ActiveFiltersTags({ selectedFilters, filterData, onRemoveFilter }: ActiveFiltersTagsProps) {
     // Build category→section lookup
     const categoryToSection = useMemo(() => {
-        const map = new Map<number, { sectionLabel: string; section: SectionItem }>();
+        const map = new Map<number | string, { sectionLabel: string; section: SectionItem }>();
         filterData.sections?.forEach(s => {
             s.categories.forEach(c => map.set(c.id, { sectionLabel: s.label, section: s }));
         });
@@ -61,8 +61,8 @@ export function ActiveFiltersTags({ selectedFilters, filterData, onRemoveFilter 
         (['stores', 'brands', 'categories', 'genders', 'suppliers'] as const).forEach(category => {
             if (category === 'categories') {
                 // Group selected categories by section for collapse logic
-                const sectionGroups = new Map<number, { section: SectionItem; selectedIds: number[] }>();
-                const ungrouped: number[] = [];
+                const sectionGroups = new Map<number | string, { section: SectionItem; selectedIds: (number | string)[] }>();
+                const ungrouped: (number | string)[] = [];
 
                 selectedCategoryIds.forEach(id => {
                     const info = categoryToSection.get(id);
@@ -157,7 +157,7 @@ export function ActiveFiltersTags({ selectedFilters, filterData, onRemoveFilter 
                 onRemoveFilter('sections', sectionId);
             }
         } else {
-            onRemoveFilter(filter.category, filter.id as number);
+            onRemoveFilter(filter.category, filter.id);
         }
     };
 

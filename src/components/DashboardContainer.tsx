@@ -9,6 +9,7 @@ import { CategoryFilterPanel } from './CategoryFilterPanel';
 import { UserManagement } from './UserManagement';
 import { ChatPanel } from './ChatPanel';
 import { AboutDefinitions } from './AboutDefinitions';
+import { FloatingActions } from './FloatingActions';
 import { useFilters } from '@/context/FilterContext';
 import { FilterItem, FilterParams } from '@/types';
 
@@ -22,6 +23,9 @@ export function DashboardContainer({
     isLoadingAlerts?: boolean;
 }) {
     const [showUserManagement, setShowUserManagement] = useState(false);
+    // Use incrementing counters as triggers so each FAB click re-triggers open
+    const [openChatTrigger, setOpenChatTrigger] = useState(0);
+    const [openDefinitionsTrigger, setOpenDefinitionsTrigger] = useState(0);
     const pathname = usePathname();
     const isOnChatPage = pathname === '/chat';
     const {
@@ -77,10 +81,10 @@ export function DashboardContainer({
                     selectedIds={(selectedFilters.categories as number[]) || []}
                     onToggle={(id) => toggleFilter('categories', id)}
                     onToggleSection={(catIds, select, sectionId) => setSelectedFilters(prev => {
-                        const currentCats = (prev.categories as number[]) || [];
-                        const currentSections = (prev.sections as number[]) || [];
-                        let nextCats: number[];
-                        let nextSections: number[];
+                        const currentCats = (prev.categories as (number | string)[]) || [];
+                        const currentSections = (prev.sections as (number | string)[]) || [];
+                        let nextCats: (number | string)[];
+                        let nextSections: (number | string)[];
                         if (select) {
                             nextCats = Array.from(new Set([...currentCats, ...catIds]));
                             nextSections = sectionId ? Array.from(new Set([...currentSections, sectionId])) : currentSections;
@@ -106,7 +110,7 @@ export function DashboardContainer({
                     isOpen={!!activeFilterId}
                     onClose={() => setActiveFilterId(null)}
                     items={activeData.items}
-                    selectedIds={selectedFilters[activeData.category] as number[]}
+                    selectedIds={selectedFilters[activeData.category] as (number | string)[]}
                     onToggle={(id) => toggleFilter(activeData.category, id)}
                     onSelectAll={() => setSelectedFilters(prev => ({ ...prev, [activeData.category]: activeData.items.map(i => i.id) }))}
                     onClear={() => setSelectedFilters(prev => ({ ...prev, [activeData.category]: [] }))}
@@ -117,10 +121,23 @@ export function DashboardContainer({
             <UserManagement isOpen={showUserManagement} onClose={() => setShowUserManagement(false)} />
 
             {/* Floating Chat Panel - Solo en páginas que no son /chat */}
-            {!isOnChatPage && <ChatPanel isFloating={true} />}
+            {!isOnChatPage && (
+                <ChatPanel
+                    isFloating={true}
+                    externalOpen={openChatTrigger || undefined}
+                />
+            )}
 
-            {/* About / Definiciones - Botón flotante */}
-            <AboutDefinitions />
+            {/* About / Definiciones */}
+            <AboutDefinitions externalOpen={openDefinitionsTrigger || undefined} />
+
+            {/* FAB unificado - Solo cuando no estamos en /chat */}
+            {!isOnChatPage && (
+                <FloatingActions
+                    onOpenChat={() => setOpenChatTrigger(n => n + 1)}
+                    onOpenDefinitions={() => setOpenDefinitionsTrigger(n => n + 1)}
+                />
+            )}
         </div>
     );
 }

@@ -32,19 +32,21 @@ export async function GET() {
         ORDER BY totalVentas DESC
       `,
             genders: `
-        SELECT DISTINCT idGenero as id, DescripcionGenero as label
-        FROM Transacciones
-        WHERE fecha >= DATEADD(YEAR, -2, GETDATE())
-        AND idGenero IS NOT NULL
+        SELECT DISTINCT IdGenero as id, DescripcionGenero as label
+        FROM Articulos
+        WHERE IdGenero IS NOT NULL
+        AND DescripcionGenero IS NOT NULL
+        AND LTRIM(RTRIM(DescripcionGenero)) <> ''
         ORDER BY label
       `,
             suppliers: `
-        SELECT MIN(idProveedor) as id, NombreProveedor as label
+        SELECT idProveedor as id, MAX(NombreProveedor) as label
         FROM Transacciones
-        WHERE NombreProveedor IS NOT NULL
+        WHERE idProveedor IS NOT NULL
+        AND NombreProveedor IS NOT NULL
         AND LTRIM(RTRIM(NombreProveedor)) <> ''
         AND fecha >= DATEADD(YEAR, -2, GETDATE())
-        GROUP BY NombreProveedor
+        GROUP BY idProveedor
         ORDER BY label
       `
         };

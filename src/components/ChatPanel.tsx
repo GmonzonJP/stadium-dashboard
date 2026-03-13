@@ -32,12 +32,18 @@ interface Message {
 interface ChatPanelProps {
     isFloating?: boolean;
     initialOpen?: boolean;
+    externalOpen?: number; // increment to trigger open
     onClose?: () => void;
     className?: string;
 }
 
-export function ChatPanel({ isFloating = true, initialOpen = false, onClose, className }: ChatPanelProps) {
+export function ChatPanel({ isFloating = true, initialOpen = false, externalOpen, onClose, className }: ChatPanelProps) {
     const [isOpen, setIsOpen] = useState(initialOpen);
+
+    // Allow parent to open the panel externally (each increment triggers open)
+    useEffect(() => {
+        if (externalOpen) setIsOpen(true);
+    }, [externalOpen]);
     const [messages, setMessages] = useState<Message[]>([
         {
             id: 'welcome',
@@ -587,30 +593,6 @@ export function ChatPanel({ isFloating = true, initialOpen = false, onClose, cla
     // Versión flotante con botón
     return (
         <>
-            {/* Botón flotante */}
-            <AnimatePresence>
-                {!isOpen && (
-                    <motion.button
-                        initial={{ scale: 0, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        exit={{ scale: 0, opacity: 0 }}
-                        onClick={() => setIsOpen(true)}
-                        className={cn(
-                            "fixed bottom-6 right-6 z-50",
-                            "w-14 h-14 rounded-full",
-                            "bg-gradient-to-br from-blue-600 to-purple-600",
-                            "shadow-lg shadow-blue-600/30",
-                            "flex items-center justify-center",
-                            "hover:scale-110 transition-transform",
-                            "group"
-                        )}
-                    >
-                        <MessageSquare className="w-6 h-6 text-white group-hover:scale-110 transition-transform" />
-                        <span className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-slate-900" />
-                    </motion.button>
-                )}
-            </AnimatePresence>
-
             {/* Panel de chat */}
             <AnimatePresence>
                 {isOpen && (
